@@ -21,6 +21,6 @@ concurrency:
 
 jobs:
     ci:
-        uses: cirkuitnet/seocart/.github/workflows/extension-ci.yml@c23bedf740e8d68cde8ff6fe5ed0126371a104eb
+        uses: cirkuitnet/seocart/.github/workflows/extension-ci.yml@2e9b4e50b174a57885af79e041dac4c09bc56250
         with:
             extension-type: payments
