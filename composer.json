@@ -1,0 +1,15 @@
+{
+	"name": "cirkuitnet/seocart-gateway-for-stripe",
+	"description": "SEOCart Gateway for Stripe connects the SEOCart store plugin to Stripe.",
+	"type": "wordpress-plugin",
+	"license": "GPL-3.0-or-later",
+	"homepage": "https://github.com/cirkuitnet/seocart-gateway-for-stripe",
+	"support": {
+		"issues": "https://github.com/cirkuitnet/seocart-gateway-for-stripe/issues",
+		"source": "https://github.com/cirkuitnet/seocart-gateway-for-stripe",
+		"security": "https://github.com/cirkuitnet/seocart-gateway-for-stripe/security/policy"
+	},
+	"require": {
+		"php": ">=8.3"
+	}
+}
