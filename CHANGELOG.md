@@ -9,6 +9,11 @@ not.
 
 ## [Unreleased]
 
+- The Stripe adapter: card payments through Stripe's PaymentIntents, authorized when an order is placed and
+  captured later in full or in part, cancelled, refunded in full or in part, looked up when an answer was lost,
+  and read from Stripe's signed webhook deliveries, whose endpoint is set up at Stripe when the settings are saved.
+  Test and live modes; Stripe accounts in the United States, in USD, GBP and EUR.
+
 ## [0.1.0]
 
 - The extension's starting point, generated from SEOCart's extension template. It does not do
