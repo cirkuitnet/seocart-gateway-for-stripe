@@ -14,7 +14,11 @@ SEOCart Gateway for Stripe connects the SEOCart store plugin to Stripe.
 
 SEOCart Gateway for Stripe is a free extension of SEOCart, the free, open-source store plugin for WordPress. It needs SEOCart, installed and active.
 
-Version 0.1.0 is the extension's starting point and does not do anything yet.
+It takes card payments through Stripe. A payment is authorized when the order is placed and captured later, in full or in part, or cancelled; a captured payment can be refunded in full or in part. When the card's bank asks the shopper to confirm a payment (3D Secure), the shopper is sent to confirm it with the bank. Card details never reach your site: SEOCart sends Stripe only the reference that Stripe's own form gives it. Stripe reports what happens to each payment through a webhook endpoint, which the extension sets up at Stripe when its settings are saved.
+
+It has a test mode and a live mode, each with its own keys. It takes payments for Stripe accounts in the United States, in US dollars, pounds sterling and euros.
+
+To try it in test mode, use Stripe's test cards (https://docs.stripe.com/testing): 4242 4242 4242 4242 is approved, 4000 0000 0000 0002 is declined, and 4000 0000 0000 3220 asks for 3D Secure, each with any future expiry date, such as 12/34, and any three-digit CVC.
 
 == Installation ==
 
@@ -24,7 +28,17 @@ Version 0.1.0 is the extension's starting point and does not do anything yet.
 
 == External services ==
 
-SEOCart Gateway for Stripe 0.1.0 does not connect to any external service. This section will list every server the extension contacts, written from the hosts the extension declares to SEOCart.
+SEOCart connects to the external services listed below, each only for the purpose stated and only under the condition stated. It contacts no other server.
+
+= Stripe =
+
+Stripe is a payment processing service. SEOCart Gateway for Stripe uses its API to authorize, capture, cancel and refund the store's card payments, to look up a payment whose answer was lost, and to set up the webhook endpoint Stripe reports payment events to.
+
+* Endpoint: `https://api.stripe.com/v1/*`
+* Data sent: The order's amount and currency, its order number and SEOCart's reference for the payment, the payment method token that Stripe's own form created in the shopper's browser, the address Stripe returns the shopper to after a bank check, refund amounts and references, and this site's webhook address. No card number, name, address or email address.
+* When: When a customer places an order paid with Stripe; when an order's payment is captured, cancelled or refunded; when SEOCart checks a payment whose answer it did not receive; and when a store manager saves the Stripe settings. Nothing is sent before Stripe is configured.
+* Terms of use: https://stripe.com/legal/ssa
+* Privacy policy: https://stripe.com/privacy
 
 == Source code and build steps ==
 

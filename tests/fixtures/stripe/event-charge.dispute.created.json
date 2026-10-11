@@ -1,0 +1,49 @@
+{
+  "id": "evt_3Fixture0008",
+  "object": "event",
+  "api_version": "2026-09-30.endive",
+  "created": 1760000100,
+  "data": {
+    "object": {
+      "id": "du_3Fixture0001",
+      "object": "dispute",
+      "amount": 2500,
+      "balance_transactions": [],
+      "charge": "ch_3Fixture0001",
+      "created": 1760002000,
+      "currency": "usd",
+      "enhanced_eligibility_types": [],
+      "evidence": {
+        "customer_email_address": null,
+        "customer_name": null
+      },
+      "evidence_details": {
+        "due_by": 1761000000,
+        "has_evidence": false,
+        "past_due": false,
+        "submission_count": 0
+      },
+      "is_charge_refundable": true,
+      "livemode": false,
+      "metadata": {},
+      "payment_intent": "pi_3Fixture0001",
+      "payment_method_details": {
+        "card": {
+          "brand": "visa",
+          "case_type": "chargeback",
+          "network_reason_code": "10.4"
+        },
+        "type": "card"
+      },
+      "reason": "fraudulent",
+      "status": "needs_response"
+    }
+  },
+  "livemode": false,
+  "pending_webhooks": 1,
+  "request": {
+    "id": "req_Fixture0100",
+    "idempotency_key": "0199c0de-0000-7000-8000-00000000a001"
+  },
+  "type": "charge.dispute.created"
+}

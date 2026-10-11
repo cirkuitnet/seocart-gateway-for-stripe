@@ -5,7 +5,7 @@
  * The extension has no development dependencies of its own. SEOCart's unit bootstrap, in the
  * SEOCart checkout beside this one, defines a placeholder ABSPATH and loads SEOCart's
  * development autoloader (PHPUnit, Brain Monkey, SEOCart and its test support); this file adds
- * the extension's own namespace to that autoloader. The integration suite runs on SEOCart's
+ * the extension's own namespace, and its tests' support classes, to that autoloader. The integration suite runs on SEOCart's
  * integration bootstrap instead (sh ../seocart/bin/ci/extension.sh integration .).
  *
  * @package SEOCart\GatewayForStripe
@@ -24,3 +24,4 @@ require dirname( __DIR__, 2 ) . '/seocart/tests/bootstrap-unit.php';
  */
 $seocart_gateway_for_stripe_loader = require dirname( __DIR__, 2 ) . '/seocart/vendor/autoload.php';
 $seocart_gateway_for_stripe_loader->addPsr4( 'SEOCart\GatewayForStripe\\', dirname( __DIR__ ) . '/src/' );
+$seocart_gateway_for_stripe_loader->addPsr4( 'SEOCart\GatewayForStripe\Tests\\', __DIR__ . '/' );

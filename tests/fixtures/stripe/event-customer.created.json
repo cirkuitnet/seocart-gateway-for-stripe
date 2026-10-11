@@ -1,0 +1,23 @@
+{
+  "id": "evt_3Fixture0010",
+  "object": "event",
+  "api_version": "2026-09-30.endive",
+  "created": 1760000100,
+  "data": {
+    "object": {
+      "id": "cus_Fixture0001",
+      "object": "customer",
+      "email": null,
+      "livemode": false,
+      "metadata": {},
+      "name": null
+    }
+  },
+  "livemode": false,
+  "pending_webhooks": 1,
+  "request": {
+    "id": "req_Fixture0100",
+    "idempotency_key": "0199c0de-0000-7000-8000-00000000a001"
+  },
+  "type": "customer.created"
+}

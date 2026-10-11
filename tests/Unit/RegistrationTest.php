@@ -14,13 +14,9 @@ namespace SEOCart\GatewayForStripe\Tests\Unit;
 use SEOCart\GatewayForStripe\Gateway;
 use PHPUnit\Framework\TestCase;
 use SEOCart\Contracts\ExtensionContext;
-use SEOCart\Contracts\Payment\AvailabilityContext;
 use SEOCart\Contracts\Payment\GatewayDescriptor;
 use SEOCart\Contracts\Payment\GatewayRegistry;
-use SEOCart\Contracts\Payment\Mode;
-use SEOCart\Contracts\Payment\Operations;
-use SEOCart\Support\Currency;
-use SEOCart\Support\Money;
+use SEOCart\Contracts\Payment\PaymentGateway;
 
 /**
  * The main file loads before SEOCart, so it names the registration action as a string, not as
@@ -66,30 +62,18 @@ final class RegistrationTest extends TestCase {
 	}
 
 	/**
-	 * Tests that the gateway describes itself as the gateway id says, and declares nothing it can do yet.
+	 * Tests that the gateway describes itself by the id the registration names, written against the contract SEOCart implements.
+	 *
+	 * What it declares beyond that is DescriptorTest's.
 	 *
 	 * @since 0.1.0
+	 * @since 0.2.0 The gateway declares what it can do; DescriptorTest checks it.
 	 */
-	public function test_the_gateway_declares_its_id_and_no_capability(): void {
+	public function test_the_gateway_declares_its_id_and_the_contract_it_is_written_against(): void {
 		$descriptor = ( new Gateway( $this->createStub( ExtensionContext::class ) ) )->describe();
 
 		$this->assertSame( Gateway::ID, $descriptor->id );
 		$this->assertSame( GatewayDescriptor::TYPE_PAYMENTS, $descriptor->type );
-		$this->assertSame( array( Mode::Test ), $descriptor->modes );
-		$this->assertSame( array(), $descriptor->settings );
-		$this->assertSame( array(), $descriptor->hosts );
-		$this->assertSame( array(), $descriptor->matrix->rows, 'The matrix declares nothing until the adapter is built.' );
-
-		foreach ( array( 'USD', 'GBP', 'EUR' ) as $code ) {
-			foreach ( array( null, 'US', 'GB' ) as $country ) {
-				foreach ( Operations::ALL as $operation ) {
-					$this->assertFalse( $descriptor->matrix->allows( $operation, Currency::of( $code ), $country ), "{$operation} in {$code} for {$country} must stay undeclared until it is built." );
-				}
-			}
-
-			$payment = new AvailabilityContext( Currency::of( $code ), Money::of( 1000, Currency::of( $code ) ), 'US', 'storefront', Mode::Test, array() );
-
-			$this->assertFalse( $descriptor->matrix->available( $payment ), "The gateway must not be offered in {$code}." );
-		}
+		$this->assertSame( PaymentGateway::CONTRACT_VERSION, $descriptor->contract );
 	}
 }

@@ -1,0 +1,45 @@
+{
+  "id": "evt_3Fixture0009",
+  "object": "event",
+  "api_version": "2026-09-30.endive",
+  "created": 1760000100,
+  "data": {
+    "object": {
+      "id": "ch_3Fixture0001",
+      "object": "charge",
+      "amount": 2500,
+      "amount_captured": 2500,
+      "amount_refunded": 1000,
+      "captured": true,
+      "currency": "usd",
+      "livemode": false,
+      "metadata": {},
+      "paid": true,
+      "payment_intent": "pi_3Fixture0001",
+      "payment_method": "pm_1Fixture0001",
+      "payment_method_details": {
+        "card": {
+          "brand": "visa",
+          "country": "US",
+          "exp_month": 12,
+          "exp_year": 2034,
+          "fingerprint": "fixtureFingerprint",
+          "funding": "credit",
+          "last4": "4242",
+          "network": "visa",
+          "three_d_secure": null
+        },
+        "type": "card"
+      },
+      "refunded": false,
+      "status": "succeeded"
+    }
+  },
+  "livemode": false,
+  "pending_webhooks": 1,
+  "request": {
+    "id": "req_Fixture0100",
+    "idempotency_key": "0199c0de-0000-7000-8000-00000000a001"
+  },
+  "type": "charge.refunded"
+}

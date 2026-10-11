@@ -1,0 +1,68 @@
+{
+  "error": {
+    "code": "payment_intent_unexpected_state",
+    "doc_url": "https://docs.stripe.com/error-codes/payment-intent-unexpected-state",
+    "message": "This PaymentIntent's status is canceled, but this operation requires another status.",
+    "payment_intent": {
+      "id": "pi_3Fixture0001",
+      "object": "payment_intent",
+      "allowed_payment_method_types": [
+        "card"
+      ],
+      "amount": 2500,
+      "amount_capturable": 0,
+      "amount_details": {
+        "tip": {}
+      },
+      "amount_received": 0,
+      "application": null,
+      "application_fee_amount": null,
+      "automatic_payment_methods": null,
+      "canceled_at": 1760000600,
+      "cancellation_reason": "requested_by_customer",
+      "capture_method": "manual",
+      "client_secret": "pi_3Fixture0001_secret_fixtureClientSecret",
+      "confirmation_method": "automatic",
+      "created": 1760000000,
+      "currency": "usd",
+      "customer": null,
+      "description": null,
+      "excluded_payment_method_types": null,
+      "last_payment_error": null,
+      "latest_charge": "ch_3Fixture0001",
+      "livemode": false,
+      "metadata": {
+        "intent_uuid": "0199c0de-0000-7000-8000-00000000a001",
+        "order_number": "1001"
+      },
+      "next_action": null,
+      "on_behalf_of": null,
+      "payment_method": "pm_1Fixture0001",
+      "payment_method_options": {
+        "card": {
+          "installments": null,
+          "mandate_options": null,
+          "network": null,
+          "request_three_d_secure": "automatic"
+        }
+      },
+      "payment_method_types": [
+        "card"
+      ],
+      "payment_record": null,
+      "processing": null,
+      "receipt_email": null,
+      "review": null,
+      "setup_future_usage": null,
+      "shipping": null,
+      "source": null,
+      "statement_descriptor": null,
+      "statement_descriptor_suffix": null,
+      "status": "canceled",
+      "transfer_data": null,
+      "transfer_group": null
+    },
+    "request_log_url": "https://dashboard.stripe.com/test/logs/req_Fixture0003?t=1760000000",
+    "type": "invalid_request_error"
+  }
+}

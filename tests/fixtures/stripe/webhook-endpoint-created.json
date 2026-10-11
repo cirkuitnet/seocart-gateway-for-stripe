@@ -1,0 +1,14 @@
+{
+  "id": "we_1Fixture0009",
+  "object": "webhook_endpoint",
+  "api_version": "2026-09-30.endive",
+  "application": null,
+  "created": 1760000000,
+  "description": "SEOCart (test)",
+  "enabled_events": [],
+  "livemode": false,
+  "metadata": {},
+  "status": "enabled",
+  "url": "https://shop.example/",
+  "secret": "whsec_createdFixtureSecret"
+}

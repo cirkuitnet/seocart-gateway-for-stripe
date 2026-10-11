@@ -1,0 +1,7 @@
+{
+  "error": {
+    "message": "Keys for idempotent requests can only be used with the same parameters they were first used with. Try using a key other than '0199c0de-0000-7000-8000-00000000a001' if you meant to execute a different request.",
+    "request_log_url": "https://dashboard.stripe.com/test/logs/req_Fixture0004?t=1760000000",
+    "type": "idempotency_error"
+  }
+}

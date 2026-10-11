@@ -1,0 +1,29 @@
+{
+  "id": "re_3Fixture0001",
+  "object": "refund",
+  "amount": 1000,
+  "balance_transaction": "txn_3Fixture0001",
+  "charge": "ch_3Fixture0001",
+  "created": 1760001000,
+  "currency": "usd",
+  "destination_details": {
+    "card": {
+      "reference": "123456789012",
+      "reference_status": "available",
+      "reference_type": "acquirer_reference_number",
+      "type": "refund"
+    },
+    "type": "card"
+  },
+  "metadata": {
+    "refund_uuid": "0199c0de-0000-7000-8000-00000000b001"
+  },
+  "payment_intent": "pi_3Fixture0001",
+  "reason": null,
+  "receipt_number": null,
+  "source_transfer_reversal": null,
+  "status": "canceled",
+  "transfer_reversal": null,
+  "failure_reason": "merchant_request",
+  "failure_balance_transaction": "txn_3Fixture0003"
+}

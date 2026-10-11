@@ -1,0 +1,6 @@
+{
+  "error": {
+    "message": "There is currently another in-progress request using this Idempotent Key (that probably means you submitted twice, and the other request is still going through): 0199c0de-0000-7000-8000-00000000a001. Please try again later.",
+    "type": "idempotency_error"
+  }
+}
