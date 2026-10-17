@@ -1,0 +1,9 @@
+{
+	"body": "{\n  \"id\": \"evt_3Fixture0010\",\n  \"object\": \"event\",\n  \"api_version\": \"2026-09-30.endive\",\n  \"created\": 1760000100,\n  \"data\": {\n    \"object\": {\n      \"id\": \"cus_Fixture0001\",\n      \"object\": \"customer\",\n      \"email\": null,\n      \"livemode\": false,\n      \"metadata\": {},\n      \"name\": null\n    }\n  },\n  \"livemode\": false,\n  \"pending_webhooks\": 1,\n  \"request\": {\n    \"id\": \"req_Fixture0100\",\n    \"idempotency_key\": \"0199c0de-0000-7000-8000-00000000a001\"\n  },\n  \"type\": \"customer.created\"\n}\n",
+	"headers": {
+		"content-type": "application/json; charset=utf-8",
+		"stripe-signature": "t=1760000100,v1=6ada748d18bdbccf2216e0f0f6df567789c8d0361faf0f44dadc04657ed652ca"
+	},
+	"mode": "test",
+	"signed_at": "2025-10-09T08:55:00+00:00"
+}

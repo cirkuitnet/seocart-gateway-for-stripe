@@ -1,0 +1,18 @@
+{
+	"request": {
+		"body": null,
+		"headers": {
+			"stripe-version": "2026-09-30.endive"
+		},
+		"host": "api.stripe.com",
+		"method": "GET",
+		"path": "/v1/refunds?payment_intent=pi_3URU9uJyxgXirw3314ikelHx&limit=100"
+	},
+	"response": {
+		"body": "{\n  \"object\": \"list\",\n  \"count\": 1,\n  \"data\": [\n    {\n      \"id\": \"re_3URU9uJyxgXirw331Qb0nBFZ\",\n      \"object\": \"refund\",\n      \"amount\": 1200,\n      \"balance_transaction\": \"txn_3URU9uJyxgXirw331p1EkfA1\",\n      \"charge\": \"ch_3URU9uJyxgXirw3313uIfBrD\",\n      \"created\": 1792230252,\n      \"currency\": \"eur\",\n      \"customer\": null,\n      \"customer_account\": null,\n      \"destination_details\": {\n        \"card\": {\n          \"reference_status\": \"pending\",\n          \"reference_type\": \"acquirer_reference_number\",\n          \"type\": \"refund\"\n        },\n        \"type\": \"card\"\n      },\n      \"metadata\": {\n        \"refund_uuid\": \"52c3752f-7dd5-5e9c-a120-4602bc145089\"\n      },\n      \"payment_intent\": \"pi_3URU9uJyxgXirw3314ikelHx\",\n      \"payment_method\": \"pm_1URU9uJyxgXirw33AUbej9pl\",\n      \"reason\": null,\n      \"receipt_number\": null,\n      \"source_transfer_reversal\": null,\n      \"status\": \"succeeded\",\n      \"transfer_reversal\": null\n    }\n  ],\n  \"has_more\": false,\n  \"url\": \"/v1/refunds\"\n}",
+		"headers": {
+			"content-type": "application/json"
+		},
+		"status": 200
+	}
+}

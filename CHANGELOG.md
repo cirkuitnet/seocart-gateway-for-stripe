@@ -13,6 +13,7 @@ not.
   captured later in full or in part, cancelled, refunded in full or in part, looked up when an answer was lost,
   and read from Stripe's signed webhook deliveries, whose endpoint is set up at Stripe when the settings are saved.
   Test and live modes; Stripe accounts in the United States, in USD, GBP and EUR.
+- A dispute Stripe reports now names its order in SEOCart's log.
 
 ## [0.1.0]
 

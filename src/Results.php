@@ -41,8 +41,8 @@ use SEOCart\Support\Money;
  *
  * Every id a result names is a Stripe id of the kind its field holds (StripeCodes::id()): a
  * PaymentIntent's for the intent, a charge's or a payment's for an authorization or a capture, a
- * refund's for a refund. A client secret handed on for the shopper's browser must be its
- * PaymentIntent's own (StripeCodes::clientSecret()). A field holding anything else makes the
+ * refund's for a refund. A client secret is read only where it is handed on, for Stripe's script
+ * in the shopper's browser, and must be its PaymentIntent's own (StripeCodes::clientSecret()). A field holding anything else makes the
  * answer one the adapter cannot read, so nothing of it reaches SEOCart.
  *
  * A state or a shape the mapping does not know is an \UnexpectedValueException, which the gateway
@@ -390,12 +390,13 @@ final class Results {
 	 *
 	 * A PaymentIntent confirmed with a return address whose bank must confirm the payment names the
 	 * bank's page (`next_action.redirect_to_url`): the shopper goes there, and comes back to the
-	 * return address. Any other step, and a PaymentIntent the browser has not confirmed yet, is taken
-	 * by Stripe's script in the browser, with the PaymentIntent's client secret as its handle.
+	 * return address; the client secret is not needed, and not read. Any other step, and a
+	 * PaymentIntent the browser has not confirmed yet, is taken by Stripe's script in the browser,
+	 * with the PaymentIntent's client secret as its handle (ownClientSecret()).
 	 *
 	 * @since 0.2.0
 	 *
-	 * @throws \UnexpectedValueException When the PaymentIntent names neither an https page nor a client secret, names a client secret that is not its own, or its amount cannot be read.
+	 * @throws \UnexpectedValueException When the PaymentIntent names neither an https page nor a client secret, hands the script a client secret that is not its own, or its amount cannot be read.
 	 *
 	 * @param array<mixed> $intent     The PaymentIntent.
 	 * @param string       $intentUuid The intent it is for.
@@ -404,25 +405,34 @@ final class Results {
 	private static function requiresAction( array $intent, string $intentUuid ): GatewayResult {
 		$intentId = self::intentId( $intent );
 		$page     = Fields::text( $intent, 'next_action', 'redirect_to_url', 'url' );
-		$handle   = Fields::text( $intent, 'client_secret' );
-
-		if ( null !== $handle && null === StripeCodes::clientSecret( $handle, $intentId ) ) {
-			throw new \UnexpectedValueException( 'A PaymentIntent waiting for the shopper names a client secret that is not its own.' );
-		}
 
 		try {
-			if ( null !== $page && str_starts_with( $page, 'https://' ) ) {
-				$action = NextAction::redirect( $page );
-			} elseif ( null !== $handle ) {
-				$action = NextAction::sdk( $handle );
-			} else {
-				throw new \UnexpectedValueException( 'A PaymentIntent waiting for the shopper names neither a page to send them to nor a client secret.' );
-			}
+			$action = null !== $page && str_starts_with( $page, 'https://' ) ? NextAction::redirect( $page ) : NextAction::sdk( self::ownClientSecret( $intent, $intentId ) );
 		} catch ( \InvalidArgumentException $refused ) {
 			throw new \UnexpectedValueException( 'A PaymentIntent waiting for the shopper names a step the payment contract does not accept.', 0, $refused );
 		}
 
 		return self::result( Operation::Authorize, Outcome::RequiresAction, $intentUuid, self::amount( $intent, 'amount' ), null, $intentId, null, $action );
+	}
+
+	/**
+	 * Returns the client secret a PaymentIntent hands to Stripe's script in the shopper's browser, which must be its own.
+	 *
+	 * The one place the adapter reads a client secret is where it hands one on: a step the script
+	 * takes. A step on the bank's page needs none, so a redirect never reads it.
+	 *
+	 * @since 0.2.0
+	 *
+	 * @throws \UnexpectedValueException When the PaymentIntent names no client secret, or one that is not its own.
+	 *
+	 * @param array<mixed> $intent   The PaymentIntent.
+	 * @param string       $intentId The PaymentIntent's id.
+	 * @return string The client secret.
+	 */
+	private static function ownClientSecret( array $intent, string $intentId ): string {
+		$handle = Fields::text( $intent, 'client_secret' ) ?? throw new \UnexpectedValueException( 'A PaymentIntent waiting for the shopper names neither a page to send them to nor a client secret.' );
+
+		return StripeCodes::clientSecret( $handle, $intentId ) ?? throw new \UnexpectedValueException( 'A PaymentIntent waiting for the shopper names a client secret that is not its own.' );
 	}
 
 	/**

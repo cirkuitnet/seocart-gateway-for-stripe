@@ -1,0 +1,20 @@
+{
+	"request": {
+		"body": "amount=2872&currency=gbp&capture_method=manual&allowed_payment_method_types%5B0%5D=card&metadata%5Bintent_uuid%5D=019b76da-a800-785f-b27b-3d9219806d6e&metadata%5Border_number%5D=000009&confirm=true&payment_method=pm_card_visa&return_url=http%3A%2F%2Fexample.org%2F%3Fseocart_payment%3D019b76da-a800-785f-b27b-3d9219806d6e",
+		"headers": {
+			"content-type": "application/x-www-form-urlencoded",
+			"idempotency-key": "019b76da-a800-785f-b27b-3d9219806d6e",
+			"stripe-version": "2026-09-30.endive"
+		},
+		"host": "api.stripe.com",
+		"method": "POST",
+		"path": "/v1/payment_intents"
+	},
+	"response": {
+		"body": "{\n  \"id\": \"pi_3URUA2JyxgXirw330V2eVSSJ\",\n  \"object\": \"payment_intent\",\n  \"allowed_payment_method_types\": [\n    \"card\"\n  ],\n  \"amount\": 2872,\n  \"amount_capturable\": 2872,\n  \"amount_details\": {\n    \"tip\": {}\n  },\n  \"amount_received\": 0,\n  \"application\": null,\n  \"application_fee_amount\": null,\n  \"automatic_payment_methods\": null,\n  \"canceled_at\": null,\n  \"cancellation_reason\": null,\n  \"capture_method\": \"manual\",\n  \"client_secret\": \"{{secret:client_secret}}\",\n  \"confirmation_method\": \"automatic\",\n  \"created\": 1792230258,\n  \"currency\": \"gbp\",\n  \"customer\": null,\n  \"customer_account\": null,\n  \"description\": null,\n  \"excluded_payment_method_types\": null,\n  \"last_payment_error\": null,\n  \"latest_charge\": \"ch_3URUA2JyxgXirw330LUXeJ4f\",\n  \"livemode\": false,\n  \"managed_payments\": {\n    \"enabled\": false\n  },\n  \"metadata\": {\n    \"intent_uuid\": \"019b76da-a800-785f-b27b-3d9219806d6e\",\n    \"order_number\": \"000009\"\n  },\n  \"next_action\": null,\n  \"on_behalf_of\": null,\n  \"payment_method\": \"pm_1URUA2JyxgXirw33pvx5Y1QC\",\n  \"payment_method_configuration_details\": null,\n  \"payment_method_options\": {\n    \"card\": {\n      \"installments\": null,\n      \"mandate_options\": null,\n      \"network\": null,\n      \"request_three_d_secure\": \"automatic\"\n    }\n  },\n  \"payment_method_types\": [\n    \"card\"\n  ],\n  \"payment_record\": null,\n  \"processing\": null,\n  \"receipt_email\": null,\n  \"review\": null,\n  \"setup_future_usage\": null,\n  \"shared_payment_granted_token\": null,\n  \"shipping\": null,\n  \"source\": null,\n  \"statement_descriptor\": null,\n  \"statement_descriptor_suffix\": null,\n  \"status\": \"requires_capture\",\n  \"transfer_data\": null,\n  \"transfer_group\": null\n}",
+		"headers": {
+			"content-type": "application/json"
+		},
+		"status": 200
+	}
+}

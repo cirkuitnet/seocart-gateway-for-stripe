@@ -1,0 +1,20 @@
+{
+	"request": {
+		"body": "payment_intent=pi_3URUB4JyxgXirw331LHK30c9&amount=1800&metadata%5Brefund_uuid%5D=4c242f35-e462-5893-8219-0401ec9f4d86",
+		"headers": {
+			"content-type": "application/x-www-form-urlencoded",
+			"idempotency-key": "4c242f35-e462-5893-8219-0401ec9f4d86",
+			"stripe-version": "2026-09-30.endive"
+		},
+		"host": "api.stripe.com",
+		"method": "POST",
+		"path": "/v1/refunds"
+	},
+	"response": {
+		"body": "{\n  \"id\": \"re_3URUB4JyxgXirw331VK6xKBD\",\n  \"object\": \"refund\",\n  \"amount\": 1800,\n  \"balance_transaction\": \"txn_3URUB4JyxgXirw331YIW0PfY\",\n  \"charge\": \"ch_3URUB4JyxgXirw331zq4mQAX\",\n  \"created\": 1792230324,\n  \"currency\": \"usd\",\n  \"customer\": null,\n  \"customer_account\": null,\n  \"destination_details\": {\n    \"card\": {\n      \"reference_status\": \"pending\",\n      \"reference_type\": \"acquirer_reference_number\",\n      \"type\": \"refund\"\n    },\n    \"type\": \"card\"\n  },\n  \"metadata\": {\n    \"refund_uuid\": \"4c242f35-e462-5893-8219-0401ec9f4d86\"\n  },\n  \"payment_intent\": \"pi_3URUB4JyxgXirw331LHK30c9\",\n  \"payment_method\": \"pm_1URUB4JyxgXirw33bptG1Sth\",\n  \"reason\": null,\n  \"receipt_number\": null,\n  \"source_transfer_reversal\": null,\n  \"status\": \"succeeded\",\n  \"transfer_reversal\": null\n}",
+		"headers": {
+			"content-type": "application/json"
+		},
+		"status": 200
+	}
+}

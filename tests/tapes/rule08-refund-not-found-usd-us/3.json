@@ -1,0 +1,18 @@
+{
+	"request": {
+		"body": null,
+		"headers": {
+			"stripe-version": "2026-09-30.endive"
+		},
+		"host": "api.stripe.com",
+		"method": "GET",
+		"path": "/v1/refunds?payment_intent=pi_3URUAeJyxgXirw330URaEgk2&limit=100"
+	},
+	"response": {
+		"body": "{\n  \"object\": \"list\",\n  \"count\": 0,\n  \"data\": [],\n  \"has_more\": false,\n  \"url\": \"/v1/refunds\"\n}",
+		"headers": {
+			"content-type": "application/json"
+		},
+		"status": 200
+	}
+}

@@ -24,12 +24,15 @@ use SEOCart\GatewayForStripe\WebhookReader;
 
 /**
  * Each event type the gateway subscribes to reads as one result, from the PaymentIntent's metadata or the Refund's own
- * fields; disputes and every other type are ignored; a PaymentIntent another integration created is ignored; an event
- * of the other mode than its address is rejected, after the signature holds.
+ * fields; a dispute is ignored with SEOCart's reason and names the PaymentIntent it concerns; every other type is
+ * ignored; a PaymentIntent another integration created is ignored; an event of the other mode than its address is
+ * rejected, after the signature holds.
  *
  * Planted violations, each shown red and removed:
  * - the `livemode` check removed: the live event on the test address is read;
- * - a Refund's PaymentIntent left unchecked: the other integration's refund is not ignored.
+ * - a Refund's PaymentIntent left unchecked: the other integration's refund is not ignored;
+ * - a refund's result without its PaymentIntent: SEOCart could not find the payment it refunds;
+ * - a dispute's PaymentIntent not passed on, or passed on unchecked, or another reason than SEOCart's.
  *
  * @since 0.2.0
  */
@@ -77,6 +80,12 @@ final class WebhookReaderTest extends GatewayTestCase {
 			$this->assertSame( array( Operation::Refund, '', Fixtures::INTENT_ID ), array( $reading->result->operation, $reading->result->intentUuid, $reading->result->providerIntentId ) );
 		}
 
+		$this->assertSame(
+			array_values( array_filter( array_keys( WebhookReader::EVENTS ), static fn( string $type ): bool => str_starts_with( $type, 'refund.' ) ) ),
+			array( $created->eventType, $dashboard->eventType, $failed->eventType ),
+			'Every Refund event the gateway reads is read above: SEOCart finds the payment of each by its PaymentIntent.'
+		);
+
 		$this->assertSame( array( Outcome::Approved, 're_3Fixture0001', Fixtures::REFUND_UUID ), array( $created->result?->outcome, $created->result?->providerObjectId, $created->refundUuid ) );
 		$this->assertSame( array( Outcome::Declined, 'expired_or_canceled_card' ), array( $failed->result?->outcome, $failed->result?->errorCode ) );
 		$this->assertSame( $created->result?->providerObjectId, $failed->result?->providerObjectId, 'A refund that fails after it was given is reported, declined, for the same Refund: SEOCart\'s ledger tells it from the approval by its outcome.' );
@@ -91,7 +100,7 @@ final class WebhookReaderTest extends GatewayTestCase {
 	 */
 	public function test_disputes_and_other_events_are_ignored(): void {
 		$expected = array(
-			'event-charge.dispute.created' => WebhookReader::DISPUTE,
+			'event-charge.dispute.created' => WebhookReading::DISPUTE,
 			'event-charge.refunded'        => WebhookReader::UNHANDLED_TYPE,
 			'event-customer.created'       => WebhookReader::UNHANDLED_TYPE,
 		);
@@ -101,6 +110,46 @@ final class WebhookReaderTest extends GatewayTestCase {
 
 			$this->assertSame( array( WebhookReadingKind::Ignored, $reason ), array( $reading->kind, $reading->reason ), $fixture );
 			$this->assertNotNull( $reading->eventId );
+		}
+	}
+
+	/**
+	 * Tests a dispute: ignored with SEOCart's reason, naming the PaymentIntent it concerns and no intent uuid, even when the Dispute's own metadata holds one.
+	 *
+	 * @since 0.2.0
+	 */
+	public function test_a_dispute_names_the_payment_intent_it_concerns(): void {
+		$withMetadata = Fixtures::with( 'event-charge.dispute.created', array( 'data' => array( 'object' => array( 'metadata' => array( 'intent_uuid' => Fixtures::INTENT_UUID ) ) ) ) );
+
+		foreach ( array( Fixtures::text( 'event-charge.dispute.created' ), $withMetadata ) as $body ) {
+			$reading = $this->read( $body );
+
+			$this->assertSame( array( WebhookReadingKind::Ignored, WebhookReading::DISPUTE, Fixtures::INTENT_ID, null ), array( $reading->kind, $reading->reason, $reading->providerIntentId, $reading->intentUuid ) );
+		}
+	}
+
+	/**
+	 * Tests a dispute whose `payment_intent` is missing, null, expanded or not a PaymentIntent's id: still ignored, naming none, never rejected, so Stripe does not deliver it again.
+	 *
+	 * @since 0.2.0
+	 */
+	public function test_a_dispute_without_a_payment_intent_id_names_none(): void {
+		$missing = Fixtures::object( 'event-charge.dispute.created' );
+		unset( $missing['data']['object']['payment_intent'] );
+		$bodies   = array( Fixtures::encode( $missing ) );
+		$expanded = array(
+			'id'     => Fixtures::INTENT_ID,
+			'object' => 'payment_intent',
+		);
+
+		foreach ( array( null, $expanded, '', 12345, 'ch_3Fixture0001', 'sk_test_leakedInAnAnswer' ) as $intent ) {
+			$bodies[] = Fixtures::with( 'event-charge.dispute.created', array( 'data' => array( 'object' => array( 'payment_intent' => $intent ) ) ) );
+		}
+
+		foreach ( $bodies as $body ) {
+			$reading = $this->read( $body );
+
+			$this->assertSame( array( WebhookReadingKind::Ignored, WebhookReading::DISPUTE, 'evt_3Fixture0008', null, null ), array( $reading->kind, $reading->reason, $reading->eventId, $reading->providerIntentId, $reading->intentUuid ) );
 		}
 	}
 

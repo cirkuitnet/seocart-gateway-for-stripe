@@ -1,0 +1,18 @@
+{
+	"request": {
+		"body": null,
+		"headers": {
+			"stripe-version": "2026-09-30.endive"
+		},
+		"host": "api.stripe.com",
+		"method": "GET",
+		"path": "/v1/payment_intents/pi_3URU9uJyxgXirw3314ikelHx"
+	},
+	"response": {
+		"body": "{\n  \"id\": \"pi_3URU9uJyxgXirw3314ikelHx\",\n  \"object\": \"payment_intent\",\n  \"allowed_payment_method_types\": [\n    \"card\"\n  ],\n  \"amount\": 2947,\n  \"amount_capturable\": 2947,\n  \"amount_details\": {\n    \"tip\": {}\n  },\n  \"amount_received\": 0,\n  \"application\": null,\n  \"application_fee_amount\": null,\n  \"automatic_payment_methods\": null,\n  \"canceled_at\": null,\n  \"cancellation_reason\": null,\n  \"capture_method\": \"manual\",\n  \"client_secret\": \"{{secret:client_secret}}\",\n  \"confirmation_method\": \"automatic\",\n  \"created\": 1792230250,\n  \"currency\": \"eur\",\n  \"customer\": null,\n  \"customer_account\": null,\n  \"description\": null,\n  \"excluded_payment_method_types\": null,\n  \"last_payment_error\": null,\n  \"latest_charge\": \"ch_3URU9uJyxgXirw3313uIfBrD\",\n  \"livemode\": false,\n  \"managed_payments\": {\n    \"enabled\": false\n  },\n  \"metadata\": {\n    \"intent_uuid\": \"019b76da-a800-76c3-88c1-7f0083a9f027\",\n    \"order_number\": \"000005\"\n  },\n  \"next_action\": null,\n  \"on_behalf_of\": null,\n  \"payment_method\": \"pm_1URU9uJyxgXirw33AUbej9pl\",\n  \"payment_method_configuration_details\": null,\n  \"payment_method_options\": {\n    \"card\": {\n      \"installments\": null,\n      \"mandate_options\": null,\n      \"network\": null,\n      \"request_three_d_secure\": \"automatic\"\n    }\n  },\n  \"payment_method_types\": [\n    \"card\"\n  ],\n  \"payment_record\": null,\n  \"processing\": null,\n  \"receipt_email\": null,\n  \"review\": null,\n  \"setup_future_usage\": null,\n  \"shared_payment_granted_token\": null,\n  \"shipping\": null,\n  \"source\": null,\n  \"statement_descriptor\": null,\n  \"statement_descriptor_suffix\": null,\n  \"status\": \"requires_capture\",\n  \"transfer_data\": null,\n  \"transfer_group\": null\n}",
+		"headers": {
+			"content-type": "application/json"
+		},
+		"status": 200
+	}
+}

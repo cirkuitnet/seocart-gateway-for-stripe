@@ -1,0 +1,18 @@
+{
+	"request": {
+		"body": null,
+		"headers": {
+			"stripe-version": "2026-09-30.endive"
+		},
+		"host": "api.stripe.com",
+		"method": "GET",
+		"path": "/v1/payment_intents/search?query=metadata%5B%22intent_uuid%22%5D%3A%22019b76da-a800-706b-8fb2-1aa475152040%22&limit=10"
+	},
+	"response": {
+		"body": "{\n  \"object\": \"search_result\",\n  \"data\": [],\n  \"has_more\": false,\n  \"next_page\": null,\n  \"url\": \"/v1/payment_intents/search\"\n}",
+		"headers": {
+			"content-type": "application/json"
+		},
+		"status": 200
+	}
+}

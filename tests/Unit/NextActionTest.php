@@ -24,12 +24,13 @@ use SEOCart\Support\Money;
 /**
  * A PaymentIntent confirmed with a return address that needs the bank sends the shopper to the bank's https page Stripe
  * names, with no handle beside it; any other step, and a PaymentIntent the browser has not confirmed yet, is Stripe's
- * script's, with the client secret as its handle. The client secret is answered to the shopper only: never logged,
- * never in a URL.
+ * script's, with the client secret as its handle. The client secret is read only for the script's step, and answered to
+ * the shopper only: never logged, never in a URL.
  *
  * Planted violations, each shown red and removed:
  * - the client secret given beside the redirect: the redirect test fails;
- * - the client secret's form left unchecked: the own-secret test fails.
+ * - the client secret's form left unchecked: the own-secret test fails;
+ * - the client secret checked before the step is known: the redirect-reads-no-secret test fails.
  *
  * @since 0.2.0
  */
@@ -54,6 +55,24 @@ final class NextActionTest extends GatewayTestCase {
 	}
 
 	/**
+	 * Tests that a redirect to the bank's page reads no client secret: placeholder text in its place, as a replayed recording holds it, or another PaymentIntent's, leaves the answer as it is.
+	 *
+	 * @since 0.2.0
+	 */
+	public function test_a_redirect_reads_no_client_secret(): void {
+		$page = Fixtures::object( 'pi-requires-action-redirect' )['next_action']['redirect_to_url']['url'];
+
+		foreach ( array( '{{secret:client_secret}}', 'pi_3Fixture0002_secret_fixtureClientSecret' ) as $secret ) {
+			$this->context->stripe->answer( 'POST', 'payment_intents', 200, Fixtures::with( 'pi-requires-action-redirect', array( 'client_secret' => $secret ) ) );
+
+			$result = $this->gateway->authorize( self::request( 'pm_card_threeDSecure2Required' ) );
+
+			$this->assertNotNull( $result->nextAction );
+			$this->assertSame( array( Outcome::RequiresAction, NextAction::REDIRECT, $page, null ), array( $result->outcome, $result->nextAction->type, $result->nextAction->url, $result->nextAction->clientToken ) );
+		}
+	}
+
+	/**
 	 * Tests the steps Stripe's script takes: another next action, and a PaymentIntent waiting for the browser to confirm it.
 	 *
 	 * @since 0.2.0
@@ -72,19 +91,19 @@ final class NextActionTest extends GatewayTestCase {
 	}
 
 	/**
-	 * Tests client secrets that are not the PaymentIntent's own (a key, a key behind its id, another PaymentIntent's, one too long): the answer is not read, and none is written.
+	 * Tests client secrets that are not the PaymentIntent's own, for a step Stripe's script takes (a key, a key behind its id, another PaymentIntent's, one too long, placeholder text): the answer is not read, and none is written.
 	 *
 	 * @since 0.2.0
 	 */
 	public function test_only_the_payment_intents_own_client_secret_is_handed_on(): void {
 		$key = 'sk_test_leakedInAnAnswer';
 
-		foreach ( array( $key, Fixtures::INTENT_ID . '_secret_' . $key, 'pi_3Fixture0002_secret_fixtureClientSecret', Fixtures::INTENT_ID . '_secret_' . str_repeat( 'a', 65 ) ) as $secret ) {
+		foreach ( array( $key, Fixtures::INTENT_ID . '_secret_' . $key, 'pi_3Fixture0002_secret_fixtureClientSecret', Fixtures::INTENT_ID . '_secret_' . str_repeat( 'a', 65 ), '{{secret:client_secret}}' ) as $secret ) {
 			$this->context->stripe->answer( 'POST', 'payment_intents', 200, Fixtures::with( 'pi-requires-action-sdk', array( 'client_secret' => $secret ) ) );
 			$this->unavailable( fn() => $this->gateway->authorize( self::request( 'pm_card_visa' ) ) );
 		}
 
-		$this->assertSame( array_fill( 0, 4, 'stripe.unexpected_answer' ), $this->context->log->codes() );
+		$this->assertSame( array_fill( 0, 5, 'stripe.unexpected_answer' ), $this->context->log->codes() );
 		$this->assertStringNotContainsString( $key, $this->written() );
 	}
 

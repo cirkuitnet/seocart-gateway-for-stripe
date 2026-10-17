@@ -38,7 +38,10 @@ use SEOCart\Contracts\Payment\WebhookReading;
  * charge without one), so Stripe is not asked to deliver either again. A Refund names only its
  * PaymentIntent, so a refund's result carries an empty
  * intent uuid and the PaymentIntent, which SEOCart resolves, and the refund's own uuid when SEOCart
- * asked for it. Disputes are read and ignored, so SEOCart can count them and warn.
+ * asked for it. A dispute is ignored with SEOCart's own reason (WebhookReading::DISPUTE) and names
+ * the PaymentIntent it concerns, from the Dispute's own `payment_intent`, so SEOCart can name the
+ * order in the warning it logs; a missing, expanded or malformed `payment_intent` names none, and
+ * the Dispute's metadata, its own and not the PaymentIntent's, is never read for an intent uuid.
  *
  * Nothing Stripe wrote reaches SEOCart unchecked: the event's id must be a Stripe event's id, an
  * event of a type the gateway does not read is passed on under the type `unhandled_type`, never the
@@ -57,15 +60,6 @@ final class WebhookReader {
 	 * @var string
 	 */
 	public const LIVEMODE_MISMATCH = 'livemode_mismatch';
-
-	/**
-	 * Why an event is ignored: it is about a dispute.
-	 *
-	 * @since 0.2.0
-	 *
-	 * @var string
-	 */
-	public const DISPUTE = 'dispute';
 
 	/**
 	 * Why an event is ignored: its PaymentIntent was not created by SEOCart, or its Refund names no PaymentIntent.
@@ -138,6 +132,15 @@ final class WebhookReader {
 	 * @var string
 	 */
 	private const REFUND = 'refund';
+
+	/**
+	 * The dispute reading of a dispute event: ignored, naming the PaymentIntent it concerns.
+	 *
+	 * @since 0.2.0
+	 *
+	 * @var string
+	 */
+	private const DISPUTE = 'dispute';
 
 	/**
 	 * Every event type the gateway subscribes to, and how it is read: the one list of the events the webhook endpoint is set up with.
@@ -249,7 +252,7 @@ final class WebhookReader {
 		}
 
 		if ( self::DISPUTE === $kind ) {
-			return WebhookReading::ignored( $id, $type, self::DISPUTE, $at );
+			return WebhookReading::ignored( $id, $type, WebhookReading::DISPUTE, $at, null, StripeCodes::id( Fields::text( $object, 'payment_intent' ), 'pi' ) );
 		}
 
 		if ( null === $kind ) {
