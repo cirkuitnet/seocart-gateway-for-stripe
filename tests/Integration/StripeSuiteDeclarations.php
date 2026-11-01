@@ -33,7 +33,8 @@ require_once dirname( __DIR__ ) . '/Support/Fixtures.php';
  * where Stripe writes it, though the id is not hidden, as the publishable key the tape keeps,
  * public by design, carries it; so does a refund's acquirer reference number, digits the suite
  * could take for a card number; and every other run of twenty letters, digits, `_` or `-` must be
- * one of Stripe's ids or words named here.
+ * one of Stripe's ids or words named here, such as the page of an error's code that its `doc_url`
+ * links to.
  *
  * @since 0.2.0
  */
@@ -187,7 +188,7 @@ trait StripeSuiteDeclarations {
 	}
 
 	/**
-	 * Returns Stripe's words a tape may hold and a log line may carry: every documented code the adapter knows, and each further word the recording shows.
+	 * Returns Stripe's words a tape may hold and a log line may carry: every documented code the adapter knows, each error code as its page in Stripe's documentation writes it, and each further word the recording shows.
 	 *
 	 * @since 0.2.0
 	 *
@@ -201,6 +202,9 @@ trait StripeSuiteDeclarations {
 					StripeCodes::ERROR_TYPES,
 					StripeCodes::DECLINE_CODES,
 					StripeCodes::ERROR_CODES,
+					// The last part of an error's `doc_url`, the page of its `code` in Stripe's documentation, such as
+					// https://stripe.com/docs/error-codes/payment-intent-authentication-failure: the code with each `_` written `-`.
+					array_map( static fn( string $code ): string => str_replace( '_', '-', $code ), StripeCodes::ERROR_CODES ),
 					StripeCodes::REFUND_FAILURE_REASONS,
 					StripeCodes::CANCELLATION_REASONS,
 					// What each delivery's event `type` holds after its first `.`, such as `amount_capturable_updated` (each fixture is named for its type).

@@ -21,15 +21,18 @@ use SEOCart\Tests\Conformance\Payment\TapeRefused;
 use SEOCart\Tests\Conformance\Payment\TapeScrubber;
 
 /**
- * SEOCart's tape scrubber, built from StripeSuiteDeclarations as the suite builds it, keeps a test publishable key of any length Stripe may give and refuses a secret key in its place, and keeps a refund's acquirer reference as its placeholder while a card number anywhere else is refused.
+ * SEOCart's tape scrubber, built from StripeSuiteDeclarations as the suite builds it, keeps a test publishable key of any length Stripe may give and refuses a secret key in its place, keeps a refund's acquirer reference as its placeholder while a card number anywhere else is refused, and keeps the link to an error code's page in Stripe's documentation while an opaque token in any other link is refused.
  *
- * Every key is made up as the test runs, so no key-shaped text is kept in the repository; the
- * refund's ids are those of the suite's recording.
+ * Every key and client secret is made up as the test runs, so no key-shaped text is kept in the
+ * repository; the refund's and the PaymentIntent's ids are those of the suite's recording.
  *
  * Planted violations, each shown red and removed: the publishable key's shape back to exactly 99
  * characters after `pk_test_` (each other length refused); the refund's reference taken out of
  * providerSecrets() (refused as a card number); the reference's declaration widened to any
- * `"reference"` field (a charge's card reference, kept, no longer refused).
+ * `"reference"` field (a charge's card reference, kept, no longer refused); the error codes'
+ * pages taken out of publicCodes() (the failed authentication's `doc_url` refused as an opaque
+ * token); the pages declared instead as any link's last part (a made-up token in another link
+ * kept), or as any page under Stripe's documentation of error codes (a made-up token there kept).
  *
  * @since 0.2.0
  */
@@ -63,6 +66,33 @@ final class SuiteDeclarationsTest extends TestCase {
 	 * @var string
 	 */
 	private const WHERE = 'Exchange 5 of rule02-cell-usd-us';
+
+	/**
+	 * The page of the error code `payment_intent_authentication_failure` in Stripe's documentation, as an error's `doc_url` links to it.
+	 *
+	 * @since 0.2.0
+	 *
+	 * @var string
+	 */
+	private const AUTHENTICATION_FAILURE_PAGE = 'https://stripe.com/docs/error-codes/payment-intent-authentication-failure';
+
+	/**
+	 * Where the suite read the PaymentIntent whose authentication failed, the resume's request, when it refused its recording.
+	 *
+	 * @since 0.2.0
+	 *
+	 * @var string
+	 */
+	private const FAILED = 'Exchange 2 of live-three-d-secure-failed';
+
+	/**
+	 * What the suite says of the refused `doc_url`, as it said it of the recording against Stripe's test mode.
+	 *
+	 * @since 0.2.0
+	 *
+	 * @var string
+	 */
+	private const OPAQUE_LINK = self::FAILED . ', its response body field last_payment_error.doc_url holds an opaque token of 20 characters or more, the shape of a secret';
 
 	/**
 	 * Stands in for the two WordPress functions the scrubber calls, each as PHP's own function it wraps behaves on a whole URL and on JSON.
@@ -224,6 +254,70 @@ final class SuiteDeclarationsTest extends TestCase {
 	}
 
 	/**
+	 * Tests that a PaymentIntent whose authentication failed on the bank's page is kept as Stripe answered it, the link to its error code's page and the error's message included.
+	 *
+	 * @since 0.2.0
+	 */
+	public function test_a_failed_authentications_documentation_link_is_kept(): void {
+		$scrubber = $this->scrubber();
+		$clean    = $scrubber->exchange( self::failedAuthentication( self::AUTHENTICATION_FAILURE_PAGE ) );
+
+		$scrubber->scanExchange( $clean, self::FAILED );
+
+		$this->assertStringContainsString( '"doc_url": "' . self::AUTHENTICATION_FAILURE_PAGE . '",', $clean->responseBody );
+		$this->assertStringContainsString( '"code": "payment_intent_authentication_failure",', $clean->responseBody );
+		$this->assertStringContainsString( '"client_secret": "{{secret:client_secret}}",', $clean->responseBody );
+	}
+
+	/**
+	 * Tests that, without its page among the public words, the link refuses the recording as an opaque token, as the suite refused a recording against Stripe's test mode.
+	 *
+	 * @since 0.2.0
+	 */
+	public function test_without_its_declaration_the_documentation_link_is_refused_as_an_opaque_token(): void {
+		$codes    = array_values( array_diff( $this->publicCodes(), array( 'payment-intent-authentication-failure' ) ) );
+		$scrubber = new TapeScrubber( array(), $this->providerSecrets(), $this->publicIdShapes(), $this->publicDigestFields(), $codes, $this->publicHeaders() );
+
+		$this->expectException( TapeRefused::class );
+		$this->expectExceptionMessage( self::OPAQUE_LINK );
+
+		$scrubber->scanExchange( $scrubber->exchange( self::failedAuthentication( self::AUTHENTICATION_FAILURE_PAGE ) ), self::FAILED );
+	}
+
+	/**
+	 * Tests that a made-up token in a link that is not an error code's page, under Stripe's documentation or anywhere else, still refuses the recording: only the pages of the codes Stripe documents are public.
+	 *
+	 * @since 0.2.0
+	 *
+	 * @dataProvider linksWithAToken
+	 *
+	 * @param string $link The link, `%s` where the token goes.
+	 */
+	public function test_a_token_in_any_other_link_is_still_refused( string $link ): void {
+		$scrubber = $this->scrubber();
+
+		$this->expectException( TapeRefused::class );
+		$this->expectExceptionMessage( self::OPAQUE_LINK );
+
+		$scrubber->scanExchange( $scrubber->exchange( self::failedAuthentication( sprintf( $link, self::madeUp( 24 ) ) ) ), self::FAILED );
+	}
+
+	/**
+	 * Returns links that carry a token where an error code's page has its code.
+	 *
+	 * @since 0.2.0
+	 *
+	 * @return array<string, array{string}> Each link, by name.
+	 */
+	public static function linksWithAToken(): array {
+		return array(
+			'under the documentation of error codes' => array( 'https://stripe.com/docs/error-codes/%s' ),
+			'an error code page with more after it'  => array( self::AUTHENTICATION_FAILURE_PAGE . '-%s' ),
+			'another site'                           => array( 'https://bank.example/auth/%s' ),
+		);
+	}
+
+	/**
 	 * Returns the exchange that lists a PaymentIntent's refunds, its one refund shaped as Stripe answers it at the pinned version once the acquirer's reference is available.
 	 *
 	 * @since 0.2.0
@@ -300,6 +394,147 @@ JSON;
 JSON;
 
 		return self::answer( 'https://api.stripe.com/v1/charges/ch_3URU9mJyxgXirw330deyPUfC', sprintf( $body, $reference ) );
+	}
+
+	/**
+	 * Returns the exchange that reads a PaymentIntent after its shopper failed the bank's 3D Secure page, shaped as Stripe answers it at the pinned version: waiting for another payment method, its `last_payment_error` the authentication's failure.
+	 *
+	 * @since 0.2.0
+	 *
+	 * @param string $docUrl The error's `doc_url`.
+	 * @return Exchange The exchange.
+	 */
+	private static function failedAuthentication( string $docUrl ): Exchange {
+		$body = <<<'JSON'
+{
+  "id": "pi_3URUAnJyxgXirw330UlWtxoW",
+  "object": "payment_intent",
+  "allowed_payment_method_types": [
+    "card"
+  ],
+  "amount": 3000,
+  "amount_capturable": 0,
+  "amount_details": {
+    "tip": {}
+  },
+  "amount_received": 0,
+  "application": null,
+  "application_fee_amount": null,
+  "automatic_payment_methods": null,
+  "canceled_at": null,
+  "cancellation_reason": null,
+  "capture_method": "manual",
+  "client_secret": "%2$s",
+  "confirmation_method": "automatic",
+  "created": 1792230305,
+  "currency": "usd",
+  "customer": null,
+  "customer_account": null,
+  "description": null,
+  "excluded_payment_method_types": null,
+  "last_payment_error": {
+    "code": "payment_intent_authentication_failure",
+    "doc_url": "%1$s",
+    "message": "The provided PaymentMethod has failed authentication. You can provide payment_method_data or a new PaymentMethod to attempt to fulfill this PaymentIntent again.",
+    "payment_method": {
+      "id": "pm_1URUAnJyxgXirw336Pmivyeg",
+      "object": "payment_method",
+      "allow_redisplay": "unspecified",
+      "billing_details": {
+        "address": {
+          "city": null,
+          "country": null,
+          "line1": null,
+          "line2": null,
+          "postal_code": null,
+          "state": null
+        },
+        "email": null,
+        "name": null,
+        "phone": null,
+        "tax_id": null
+      },
+      "card": {
+        "brand": "visa",
+        "checks": {
+          "address_line1_check": null,
+          "address_postal_code_check": null,
+          "cvc_check": null
+        },
+        "country": "US",
+        "display_brand": "visa",
+        "exp_month": 10,
+        "exp_year": 2027,
+        "fingerprint": "d3QpL1xw9KhTzRbe",
+        "funding": "credit",
+        "generated_from": null,
+        "last4": "3220",
+        "networks": {
+          "available": [
+            "visa"
+          ],
+          "preferred": null
+        },
+        "regulated_status": "unregulated",
+        "three_d_secure_usage": {
+          "supported": true
+        },
+        "wallet": null
+      },
+      "created": 1792230305,
+      "customer": null,
+      "customer_account": null,
+      "livemode": false,
+      "metadata": {},
+      "shared_payment_granted_token": null,
+      "type": "card"
+    },
+    "payment_method_type": "card",
+    "type": "invalid_request_error"
+  },
+  "latest_charge": null,
+  "livemode": false,
+  "managed_payments": {
+    "enabled": false
+  },
+  "metadata": {
+    "intent_uuid": "019b76da-a800-70a4-a92f-379c066db46e",
+    "order_number": "000001"
+  },
+  "next_action": null,
+  "on_behalf_of": null,
+  "payment_method": null,
+  "payment_method_configuration_details": null,
+  "payment_method_options": {
+    "card": {
+      "installments": null,
+      "mandate_options": null,
+      "network": null,
+      "request_three_d_secure": "automatic"
+    }
+  },
+  "payment_method_types": [
+    "card"
+  ],
+  "payment_record": null,
+  "processing": null,
+  "receipt_email": null,
+  "review": null,
+  "setup_future_usage": null,
+  "shared_payment_granted_token": null,
+  "shipping": null,
+  "source": null,
+  "statement_descriptor": null,
+  "statement_descriptor_suffix": null,
+  "status": "requires_payment_method",
+  "transfer_data": null,
+  "transfer_group": null
+}
+JSON;
+
+		$intent = 'pi_3URUAnJyxgXirw330UlWtxoW';
+
+		return self::answer( 'https://api.stripe.com/v1/payment_intents/' . $intent, sprintf( $body, $docUrl, $intent . '_secret_' . self::madeUp( 25 ) ) );
 	}
 
 	/**
