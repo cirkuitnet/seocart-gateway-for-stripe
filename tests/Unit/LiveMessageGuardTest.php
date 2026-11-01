@@ -20,7 +20,8 @@ use SEOCart\GatewayForStripe\Tests\Support\Live\MessageGuard;
  * Every canary is built when the test runs, so no key-shaped text is kept in the repository.
  *
  * Planted violation, shown red and removed: each shape taken out of MessageGuard::SHAPES in
- * turn: its canary is formatted into the message, and redact() leaves it in the text.
+ * turn: its canary is formatted into the message, and redact() leaves it in the text; the address
+ * pattern back to a plain `://` (an address JSON escaped, `https:\/\/bank.example\/auth?token=...`, is left whole).
  *
  * @since 0.2.0
  */
@@ -63,6 +64,24 @@ final class LiveMessageGuardTest extends TestCase {
 	}
 
 	/**
+	 * Tests that an address json_encode() escaped, with the backslash before each slash, is blanked whole, its query's opaque value with it.
+	 *
+	 * @since 0.2.0
+	 */
+	public function test_a_json_escaped_address_is_blanked_whole(): void {
+		$opaque  = bin2hex( random_bytes( 12 ) );
+		$encoded = json_encode( array( 'next' => 'https://bank.example/auth?token=' . $opaque ) );
+
+		$this->assertStringContainsString( 'https:\/\/bank.example\/auth?token=', (string) $encoded );
+
+		$redacted = MessageGuard::redact( 'The answer was ' . $encoded . '.' );
+
+		$this->assertStringNotContainsString( $opaque, $redacted );
+		$this->assertStringNotContainsString( 'bank.example', $redacted );
+		$this->assertStringStartsWith( 'The answer was {"next":"', $redacted );
+	}
+
+	/**
 	 * Returns a canary of each shape, made up as the test runs.
 	 *
 	 * @since 0.2.0
@@ -81,6 +100,7 @@ final class LiveMessageGuardTest extends TestCase {
 			'client secret'      => array( 'a client secret', 'pi_' . $random( 24 ) . '_secret_' . $random( 25 ) ),
 			'receipt'            => array( 'a receipt\'s address', '"receipt_url":"https://pay.example/receipts/x"' ),
 			'address with query' => array( 'an address with a query', 'https://hooks.example/3d_secure?client_secret=' . $random( 12 ) ),
+			'escaped address'    => array( 'an address with a query', 'https:\/\/bank.example\/auth?token=' . $random( 24 ) ),
 		);
 	}
 }

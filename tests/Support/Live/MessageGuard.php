@@ -28,14 +28,14 @@ final class MessageGuard {
 	 * The shapes refused, each a regular expression matching the whole value, by what it is.
 	 *
 	 * An address with a query comes first: redact() blanks it whole before it blanks a secret its
-	 * query may hold.
+	 * query may hold. Each slash after the scheme may carry the backslash JSON puts before it.
 	 *
 	 * @since 0.2.0
 	 *
 	 * @var array<string, string>
 	 */
 	public const SHAPES = array(
-		'an address with a query'    => '#[a-z][a-z0-9+.\-]*://[^\s?\#"\'<>]*\?[^\s"\'<>]*#i',
+		'an address with a query'    => '#[a-z][a-z0-9+.\-]*:(?:\\\\?/){2}[^\s?\#"\'<>]*\?[^\s"\'<>]*#i',
 		'a secret or restricted key' => '/(?<![A-Za-z0-9])(?:sk|rk)_[A-Za-z0-9_]{20,}/',
 		'a publishable key'          => '/(?<![A-Za-z0-9])pk_(?:test|live)_[A-Za-z0-9_]{20,}/',
 		'a webhook signing secret'   => '/whsec_[A-Za-z0-9_]*/',
