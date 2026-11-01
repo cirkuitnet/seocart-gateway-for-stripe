@@ -118,15 +118,6 @@ abstract class LiveStripeCase extends ConformanceHarness {
 	public const BROWSER_WORDS = array( 'succeeded', 'failed', 'no-control', 'timeout' );
 
 	/**
-	 * Stripe's published test payment method of a card whose charge is disputed once it is captured.
-	 *
-	 * @since 0.2.0
-	 *
-	 * @var string
-	 */
-	protected const DISPUTED = 'pm_card_createDispute';
-
-	/**
 	 * The events of each kind of payment the test waits for: the PaymentIntent's, which every API version sends; a refund's or a dispute's event comes beside them when Stripe sends one.
 	 *
 	 * @since 0.2.0

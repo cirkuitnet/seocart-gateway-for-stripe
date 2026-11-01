@@ -21,7 +21,7 @@ use SEOCart\Tests\Conformance\Payment\TapeRefused;
 use SEOCart\Tests\Conformance\Payment\TapeScrubber;
 
 /**
- * SEOCart's tape scrubber, built from StripeSuiteDeclarations as the suite builds it, keeps a test publishable key of any length Stripe may give and refuses a secret key in its place, keeps a refund's acquirer reference as its placeholder while a card number anywhere else is refused, and keeps the link to an error code's page in Stripe's documentation while an opaque token in any other link is refused.
+ * SEOCart's tape scrubber, built from StripeSuiteDeclarations as the suite builds it, keeps a test publishable key of any length Stripe may give and refuses a secret key in its place, keeps a refund's acquirer reference as its placeholder while a card number anywhere else is refused, and keeps the link to an error code's page in Stripe's documentation while an opaque token in any other link is refused, and keeps the test payment methods the live tests send in a request while any other long token in that field is refused.
  *
  * Every key and client secret is made up as the test runs, so no key-shaped text is kept in the
  * repository; the refund's and the PaymentIntent's ids are those of the suite's recording.
@@ -32,7 +32,9 @@ use SEOCart\Tests\Conformance\Payment\TapeScrubber;
  * `"reference"` field (a charge's card reference, kept, no longer refused); the error codes'
  * pages taken out of publicCodes() (the failed authentication's `doc_url` refused as an opaque
  * token); the pages declared instead as any link's last part (a made-up token in another link
- * kept), or as any page under Stripe's documentation of error codes (a made-up token there kept).
+ * kept), or as any page under Stripe's documentation of error codes (a made-up token there kept); the
+ * dispute's test payment method taken out of publicCodes() (the soak's second exchange refused as an
+ * opaque token).
  *
  * @since 0.2.0
  */
@@ -93,6 +95,24 @@ final class SuiteDeclarationsTest extends TestCase {
 	 * @var string
 	 */
 	private const OPAQUE_LINK = self::FAILED . ', its response body field last_payment_error.doc_url holds an opaque token of 20 characters or more, the shape of a secret';
+
+	/**
+	 * Where the suite read the soak's second request, the dispute's authorization, when it refused its recording against Stripe's test mode.
+	 *
+	 * @since 0.2.0
+	 *
+	 * @var string
+	 */
+	private const SOAK = 'Exchange 2 of live-soak';
+
+	/**
+	 * What the suite says of a test payment method that is no public word, as it said it of the soak's recording.
+	 *
+	 * @since 0.2.0
+	 *
+	 * @var string
+	 */
+	private const OPAQUE_PAYMENT_METHOD = self::SOAK . ', its request body field payment_method holds an opaque token of 20 characters or more, the shape of a secret';
 
 	/**
 	 * Stands in for the two WordPress functions the scrubber calls, each as PHP's own function it wraps behaves on a whole URL and on JSON.
@@ -318,6 +338,95 @@ final class SuiteDeclarationsTest extends TestCase {
 	}
 
 	/**
+	 * Tests that an authorization's request is kept, its body as the gateway sends it, whichever payment method the live tests send: Stripe's published test aliases, among them the dispute's, and the id of a PaymentMethod.
+	 *
+	 * @since 0.2.0
+	 *
+	 * @dataProvider paymentMethodsSent
+	 *
+	 * @param string $paymentMethod The request's `payment_method`.
+	 */
+	public function test_an_authorizations_request_is_kept_whichever_payment_method_the_live_tests_send( string $paymentMethod ): void {
+		$scrubber = $this->scrubber();
+		$clean    = $scrubber->exchange( self::authorization( $paymentMethod ) );
+
+		$scrubber->scanExchange( $clean, self::SOAK );
+
+		$this->assertStringContainsString( 'payment_method=' . $paymentMethod . '&', (string) $clean->body );
+		$this->assertStringContainsString( 'metadata%5Border_number%5D=000007', (string) $clean->body );
+	}
+
+	/**
+	 * Returns the payment methods the live tests send, as the suite declares them, and the id of a PaymentMethod, 24 letters and digits after its prefix.
+	 *
+	 * @since 0.2.0
+	 *
+	 * @return array<string, array{string}> Each payment method, by name.
+	 */
+	public static function paymentMethodsSent(): array {
+		return array(
+			'the approved card'          => array( self::APPROVED ),
+			'the declined card'          => array( self::DECLINED ),
+			'the card that asks for 3DS' => array( self::REQUIRES_ACTION ),
+			'the disputed card'          => array( self::DISPUTED ),
+			'a PaymentMethod id'         => array( 'pm_' . self::madeUp( 24 ) ),
+		);
+	}
+
+	/**
+	 * Tests that, without its declaration, the dispute's payment method refuses the soak's recording as an opaque token, as the suite refused a recording against Stripe's test mode.
+	 *
+	 * @since 0.2.0
+	 */
+	public function test_without_its_declaration_the_disputed_payment_method_is_refused_as_an_opaque_token(): void {
+		$codes    = array_values( array_diff( $this->publicCodes(), array( self::DISPUTED ) ) );
+		$scrubber = new TapeScrubber( array(), $this->providerSecrets(), $this->publicIdShapes(), $this->publicDigestFields(), $codes, $this->publicHeaders() );
+
+		$this->expectException( TapeRefused::class );
+		$this->expectExceptionMessage( self::OPAQUE_PAYMENT_METHOD );
+
+		$scrubber->scanExchange( $scrubber->exchange( self::authorization( self::DISPUTED ) ), self::SOAK );
+	}
+
+	/**
+	 * Tests that an alias Stripe publishes and the suite does not declare, or a key in the payment method's place, still refuses the recording: only the ones named are public.
+	 *
+	 * @since 0.2.0
+	 *
+	 * @dataProvider paymentMethodsRefused
+	 *
+	 * @param string $paymentMethod The request's `payment_method`.
+	 */
+	public function test_any_other_long_token_in_the_payment_method_is_still_refused( string $paymentMethod ): void {
+		$scrubber = $this->scrubber();
+
+		try {
+			$scrubber->scanExchange( $scrubber->exchange( self::authorization( $paymentMethod ) ), self::SOAK );
+			$this->fail( 'The recording kept a payment method no declaration names.' );
+		} catch ( TapeRefused $refused ) {
+			$this->assertStringContainsString( self::SOAK . ', its request body field payment_method holds', $refused->getMessage() );
+			$this->assertStringNotContainsString( $paymentMethod, $refused->getMessage() );
+		}
+	}
+
+	/**
+	 * Returns payment methods no declaration names.
+	 *
+	 * @since 0.2.0
+	 *
+	 * @return array<string, array{string}> Each payment method, by name.
+	 */
+	public static function paymentMethodsRefused(): array {
+		return array(
+			'another alias of Stripe'               => array( 'pm_card_chargeDeclinedInsufficientFunds' ),
+			'the disputed alias with more after it' => array( self::DISPUTED . self::madeUp( 4 ) ),
+			'a PaymentMethod id of another length'  => array( 'pm_' . self::madeUp( 40 ) ),
+			'a secret key'                          => array( 'sk_test_' . self::madeUp( 99 ) ),
+			'a restricted key'                      => array( 'rk_test_' . self::madeUp( 99 ) ),
+		);
+	}
+
+	/**
 	 * Returns the exchange that lists a PaymentIntent's refunds, its one refund shaped as Stripe answers it at the pinned version once the acquirer's reference is available.
 	 *
 	 * @since 0.2.0
@@ -535,6 +644,48 @@ JSON;
 		$intent = 'pi_3URUAnJyxgXirw330UlWtxoW';
 
 		return self::answer( 'https://api.stripe.com/v1/payment_intents/' . $intent, sprintf( $body, $docUrl, $intent . '_secret_' . self::madeUp( 25 ) ) );
+	}
+
+	/**
+	 * Returns the exchange that authorizes a payment as the soak's requests do, in the form the gateway sends: the amount, the intent's metadata, the payment method and the page the shopper returns to.
+	 *
+	 * @since 0.2.0
+	 *
+	 * @param string $paymentMethod The request's `payment_method`.
+	 * @return Exchange The exchange.
+	 */
+	private static function authorization( string $paymentMethod ): Exchange {
+		$intentUuid = '019b76da-a800-7ac1-bfd5-2a2ba5f296a0';
+		$body       = http_build_query(
+			array(
+				'amount'                       => 3000,
+				'currency'                     => 'usd',
+				'capture_method'               => 'manual',
+				'allowed_payment_method_types' => array( 'card' ),
+				'metadata'                     => array(
+					'intent_uuid'  => $intentUuid,
+					'order_number' => '000007',
+				),
+				'confirm'                      => 'true',
+				'payment_method'               => $paymentMethod,
+				'return_url'                   => 'http://example.org/?seocart_payment=' . $intentUuid,
+			)
+		);
+		$answer     = '{"id": "pi_3URU9mJyxgXirw330FROUxix", "object": "payment_intent", "payment_method": "pm_1URU9mJyxgXirw33PuxW6kdB", "status": "requires_capture"}';
+
+		return new Exchange(
+			'POST',
+			'https://api.stripe.com/v1/payment_intents',
+			array(
+				'content-type'    => 'application/x-www-form-urlencoded',
+				'idempotency-key' => $intentUuid,
+				'stripe-version'  => Gateway::API_VERSION,
+			),
+			$body,
+			200,
+			array( 'content-type' => 'application/json' ),
+			$answer
+		);
 	}
 
 	/**

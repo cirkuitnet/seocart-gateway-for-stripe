@@ -68,6 +68,15 @@ trait StripeSuiteDeclarations {
 	private const REQUIRES_ACTION = 'pm_card_threeDSecure2Required';
 
 	/**
+	 * Stripe's published test payment method of a card whose charge is disputed once it is captured: only the live tests send it.
+	 *
+	 * @since 0.2.0
+	 *
+	 * @var string
+	 */
+	private const DISPUTED = 'pm_card_createDispute';
+
+	/**
 	 * The event fixtures a recording writes as its webhook deliveries, by delivery name: one the gateway reads as a result, one it ignores.
 	 *
 	 * @since 0.2.0
@@ -210,9 +219,11 @@ trait StripeSuiteDeclarations {
 					// What each delivery's event `type` holds after its first `.`, such as `amount_capturable_updated` (each fixture is named for its type).
 					array_map( static fn( string $fixture ): string => substr( $fixture, (int) strpos( $fixture, '.' ) + 1 ), array_values( self::DELIVERIES ) ),
 					array(
-						// The `payment_method` of the decline's and of the 3D Secure scenario's authorization, in the request's body.
+						// The `payment_method` of the decline's, of the 3D Secure scenario's and of the dispute's authorization, in the request's body:
+						// Stripe's published test aliases, each of 20 characters or more, which none of the ids' shapes in publicIdShapes() fits.
 						self::DECLINED,
 						self::REQUIRES_ACTION,
+						self::DISPUTED,
 						// A Refund's `destination_details.card.reference_type`.
 						'acquirer_reference_number',
 						// A query key of the 3D Secure page's URL, `next_action.redirect_to_url.url`; its value is the client secret's placeholder.
