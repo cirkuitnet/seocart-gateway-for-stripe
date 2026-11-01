@@ -20,9 +20,11 @@ namespace SEOCart\GatewayForStripe\Tests\Support\Live;
  * job runs only in this repository, as a fork has no secrets; a secret reaches only the step that
  * needs it, through that step's `env:`; nothing traces the shell, prints the environment or uploads
  * a file; one run at a time uses the account, and none is cancelled midway; every job has a
- * time limit; and the jobs and the choices of the `parts` input are the parts the verdict judges, no
- * other. The workflow is plain YAML in a known layout, two spaces deeper per level as the
- * repository's files are written, so its lines are read by their indentation; nothing parses it.
+ * time limit; the jobs and the choices of the `parts` input are the parts the verdict judges, no
+ * other; each part's job runs when its own part or `all` is chosen; and the verdict waits for every
+ * part and runs whatever becomes of them. The workflow is plain YAML in a known layout, two spaces
+ * deeper per level as the repository's files are written, so its lines are read by their
+ * indentation; nothing parses it.
  *
  * @since 0.2.0
  */
@@ -141,9 +143,11 @@ final class WorkflowFacts {
 	}
 
 	/**
-	 * Checks that the jobs besides the verdict are the parts the verdict judges, and that the `parts` input offers `all` and each of them.
+	 * Checks that the jobs are the parts the verdict judges and the verdict, that each part is chosen by its own condition, that the verdict waits for them all, and that the `parts` input offers `all` and each of them.
 	 *
-	 * A job or a choice outside Verdict::JOBS is a part the verdict would not judge.
+	 * A job or a choice outside Verdict::JOBS is a part the verdict would not judge; a part whose
+	 * condition names another part, or not `all`, is a part the weekly run skips; a part the
+	 * verdict does not wait for is judged before it ends.
 	 *
 	 * @since 0.2.0
 	 *
@@ -153,22 +157,92 @@ final class WorkflowFacts {
 	 */
 	private static function parts( array $lines ): array {
 		$problems = array();
-		$jobs     = array_values( array_diff( array_keys( self::children( $lines, self::topLevel( $lines, 'jobs' ) ) ), array( 'verdict' ) ) );
-		$parts    = array_keys( Verdict::JOBS );
+		$jobs     = self::children( $lines, self::topLevel( $lines, 'jobs' ) );
+		$names    = array_keys( $jobs );
+		$expected = array_merge( array_keys( Verdict::JOBS ), array( 'verdict' ) );
 		$choices  = self::choices( $lines );
-		$expected = array_merge( array( 'all' ), array_values( Verdict::JOBS ) );
+		$offered  = array_merge( array( 'all' ), array_values( Verdict::JOBS ) );
 
-		sort( $jobs );
-		sort( $parts );
-		sort( $choices );
+		sort( $names );
 		sort( $expected );
+		sort( $choices );
+		sort( $offered );
 
-		if ( $parts !== $jobs ) {
-			$problems[] = sprintf( 'The jobs besides the verdict are %1$s, not exactly %2$s.', array() === $jobs ? 'none' : implode( ', ', $jobs ), implode( ', ', $parts ) );
+		if ( $expected !== $names ) {
+			$problems[] = sprintf( 'The jobs are %1$s, not exactly %2$s.', array() === $names ? 'none' : implode( ', ', $names ), implode( ', ', $expected ) );
 		}
 
-		if ( $expected !== $choices ) {
-			$problems[] = sprintf( 'The parts input offers %1$s, not exactly %2$s.', array() === $choices ? 'nothing it lists' : implode( ', ', $choices ), implode( ', ', $expected ) );
+		if ( $offered !== $choices ) {
+			$problems[] = sprintf( 'The parts input offers %1$s, not exactly %2$s.', array() === $choices ? 'nothing it lists' : implode( ', ', $choices ), implode( ', ', $offered ) );
+		}
+
+		return array_merge( $problems, self::conditions( $lines, $jobs ), self::verdict( $lines, $jobs ) );
+	}
+
+	/**
+	 * Checks that each part's job runs when its own part, or `all`, is chosen, by a condition compared whole, so no term can stop it from running.
+	 *
+	 * @since 0.2.0
+	 *
+	 * @param string[]           $lines The lines.
+	 * @param array<string, int> $jobs  Each job's line, by job.
+	 * @return list<string> What is wrong.
+	 * @phpstan-param list<string> $lines
+	 */
+	private static function conditions( array $lines, array $jobs ): array {
+		$problems = array();
+
+		foreach ( Verdict::JOBS as $job => $part ) {
+			if ( ! isset( $jobs[ $job ] ) ) {
+				continue;
+			}
+
+			$keys   = self::children( $lines, $jobs[ $job ] );
+			$chosen = sprintf( 'fromJSON(\'["all", "%s"]\')', $part );
+
+			$condition = sprintf( "if: github.repository == '%s' && contains(%s, inputs.parts || 'all')", self::REPOSITORY, $chosen );
+
+			if ( ! isset( $keys['if'] ) || ! self::isExactly( $lines, $keys['if'], $condition ) ) {
+				$problems[] = sprintf( 'Line %1$d: the job %2$s has no condition %3$s, written exactly `%4$s` on a line of its own.', $jobs[ $job ] + 1, $job, $chosen, $condition );
+			}
+		}
+
+		return $problems;
+	}
+
+	/**
+	 * Checks that the verdict waits for exactly the parts and runs whatever becomes of them, by a condition compared whole.
+	 *
+	 * @since 0.2.0
+	 *
+	 * @param string[]           $lines The lines.
+	 * @param array<string, int> $jobs  Each job's line, by job.
+	 * @return list<string> What is wrong.
+	 * @phpstan-param list<string> $lines
+	 */
+	private static function verdict( array $lines, array $jobs ): array {
+		if ( ! isset( $jobs['verdict'] ) ) {
+			return array();
+		}
+
+		$problems = array();
+		$keys     = self::children( $lines, $jobs['verdict'] );
+		$needs    = isset( $keys['needs'] ) && 1 === preg_match( '/^\s*needs:\s*\[(.*)\]\s*$/D', $lines[ $keys['needs'] ], $match )
+			? array_map( 'trim', explode( ',', $match[1] ) )
+			: array();
+		$parts    = array_keys( Verdict::JOBS );
+
+		sort( $needs );
+		sort( $parts );
+
+		if ( $parts !== $needs ) {
+			$problems[] = sprintf( 'Line %1$d: the verdict needs %2$s, not exactly %3$s.', $jobs['verdict'] + 1, array() === $needs ? 'nothing it lists' : implode( ', ', $needs ), implode( ', ', $parts ) );
+		}
+
+		$condition = sprintf( "if: always() && github.repository == '%s'", self::REPOSITORY );
+
+		if ( ! isset( $keys['if'] ) || ! self::isExactly( $lines, $keys['if'], $condition ) ) {
+			$problems[] = sprintf( 'Line %1$d: the verdict does not run after a part fails: its if must hold always(), written exactly `%2$s` on a line of its own.', $jobs['verdict'] + 1, $condition );
 		}
 
 		return $problems;
@@ -207,9 +281,8 @@ final class WorkflowFacts {
 				break;
 			}
 
-			if ( 1 === preg_match( '/^\s*-\s+["\']?([^"\'\s]+)["\']?\s*$/', $lines[ $next ], $match ) ) {
-				$choices[] = $match[1];
-			}
+			// A line that is not one choice is kept as it is, so it reads as a choice the verdict does not judge.
+			$choices[] = 1 === preg_match( '/^\s*-\s+["\']?([^"\'\s]+)["\']?(?:\s+#.*)?\s*$/', $lines[ $next ], $match ) ? $match[1] : trim( $lines[ $next ] );
 		}
 
 		return $choices;
@@ -268,7 +341,9 @@ final class WorkflowFacts {
 
 		// An expression runs to the first two closing braces outside a single-quoted string. A
 		// quote doubled inside a string, its escape, reads as two strings back to back.
-		preg_match_all( '/\$\{\{(?:\'[^\']*+\'|[^\'}]++|\}(?!\}))*+\}\}/', $text, $expressions, PREG_OFFSET_CAPTURE );
+		if ( false === preg_match_all( '/\$\{\{(?:\'[^\']*+\'|[^\'}]++|\}(?!\}))*+\}\}/', $text, $expressions, PREG_OFFSET_CAPTURE ) ) {
+			return array( 'The expressions of the workflow could not be read, so no secret in them is checked.' );
+		}
 
 		foreach ( $expressions[0] as list( $expression, $offset ) ) {
 			if ( 1 !== preg_match( '/\bsecrets\b/i', $expression ) ) {
@@ -330,6 +405,23 @@ final class WorkflowFacts {
 		return self::CONCURRENCY_GROUP === $value( 'group' ) && 'false' === $value( 'cancel-in-progress' )
 			? array()
 			: array( sprintf( 'The workflow\'s concurrency is not the group %s with cancel-in-progress: false.', self::CONCURRENCY_GROUP ) );
+	}
+
+	/**
+	 * Tells whether a line is exactly a condition: the line, its spaces apart, and no continuation after it.
+	 *
+	 * A line after it that is deeper than it would continue it (`&& false`), so it is refused.
+	 *
+	 * @since 0.2.0
+	 *
+	 * @param string[] $lines     The lines.
+	 * @param int      $at        The condition's line.
+	 * @param string   $condition The condition, as `if: <expression>`.
+	 * @return bool True when the line is the condition alone.
+	 * @phpstan-param list<string> $lines
+	 */
+	private static function isExactly( array $lines, int $at, string $condition ): bool {
+		return trim( $lines[ $at ] ) === $condition && self::indent( $lines[ $at + 1 ] ?? '' ) <= self::indent( $lines[ $at ] );
 	}
 
 	/**

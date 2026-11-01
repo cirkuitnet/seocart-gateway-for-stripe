@@ -19,7 +19,8 @@ use SEOCart\GatewayForStripe\Tests\Support\Live\Verdict;
  *
  * Planted violations, each shown red and removed:
  * - in Verdict::judge(), a skipped job counted as a success: the run whose selected job skipped is green;
- * - in Verdict::judge(), the counts' check removed: the run without the suite's counts is green.
+ * - in Verdict::judge(), the counts' check removed: the run without the suite's counts is green;
+ * - every proof of one job removed from Verdict::PROOFS (in memory, and in the file): the table no longer names every job.
  *
  * @since 0.2.0
  */
@@ -108,6 +109,57 @@ final class LiveVerdictTest extends TestCase {
 		$needs = self::needs();
 		$needs['live-conformance']['outputs']['skip-set'] = 'differs';
 		$this->assertSame( array( 'The job live-conformance skipped other tests than the two the replay skips.' ), Verdict::judge( $needs, 'conformance' )['problems'] );
+	}
+
+	/**
+	 * Tests that every job has a proof in the table, and the table proves no job the run lacks.
+	 *
+	 * @since 0.2.0
+	 */
+	public function test_every_job_has_a_proof(): void {
+		$this->assertSame( self::jobs(), self::provedJobs( Verdict::PROOFS ) );
+	}
+
+	/**
+	 * Tests that a table with every proof of one job removed is found.
+	 *
+	 * @since 0.2.0
+	 */
+	public function test_a_job_without_a_proof_is_found(): void {
+		$planted = array_filter( Verdict::PROOFS, static fn( string $job ): bool => 'webhooks' !== $job );
+
+		$this->assertNotSame( self::jobs(), self::provedJobs( $planted ) );
+	}
+
+	/**
+	 * Returns the jobs, sorted.
+	 *
+	 * @since 0.2.0
+	 *
+	 * @return list<string> The jobs.
+	 */
+	private static function jobs(): array {
+		$jobs = array_keys( Verdict::JOBS );
+
+		sort( $jobs );
+
+		return $jobs;
+	}
+
+	/**
+	 * Returns the jobs a table of proofs names, each once, sorted.
+	 *
+	 * @since 0.2.0
+	 *
+	 * @param array<string, string> $proofs Each proof, with the job that proves it.
+	 * @return list<string> The jobs.
+	 */
+	private static function provedJobs( array $proofs ): array {
+		$jobs = array_values( array_unique( array_values( $proofs ) ) );
+
+		sort( $jobs );
+
+		return $jobs;
 	}
 
 	/**

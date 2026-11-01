@@ -22,8 +22,9 @@ use SEOCart\GatewayForStripe\Tests\Support\Live\WorkflowFacts;
  *
  * Planted violations, each shown red and removed:
  * - `push:` added to the workflow's `on:` in the file: the first test fails naming the triggers;
- * - a `cli` job, then a `cli` choice of the `parts` input, added back to the file: the first test fails
- *   naming the jobs, then the choices;
+ * - a `cli` job, then a `cli` choice of the `parts` input, added back to the file, and the verdict's
+ *   `needs` or a part's `if` changed in it: the first test fails naming the jobs, the choices, the
+ *   condition or the needs;
  * - in WorkflowFacts::secrets(), only the lines holding `secrets.` read, and no comment's line: the
  *   bracket form, `toJSON(secrets)`, the capitals and the shell comment are not found;
  * - in WorkflowFacts::secrets(), an expression ended at its first `}}`, quoted or not: the secrets
@@ -59,6 +60,34 @@ final class StripeTestModeWorkflowTest extends TestCase {
 	}
 
 	/**
+	 * Tests that a workflow whose expressions cannot be read is a violation, not a pass.
+	 *
+	 * The regular expression gives up, and returns false, when PCRE's backtrack limit is lowered and
+	 * its JIT is off. A pattern already compiled in this process keeps its JIT, so a PHP process of
+	 * its own reads the workflow with both settings from its first use of the pattern.
+	 *
+	 * @since 0.2.0
+	 */
+	public function test_expressions_that_cannot_be_read_are_a_violation(): void {
+		$support = __DIR__ . '/../Support/Live/';
+		$code    = sprintf(
+			'require %1$s; require %2$s; require %3$s; echo implode( "\n", \%4$s::violations( file( %5$s, FILE_IGNORE_NEW_LINES ) ) );',
+			var_export( $support . 'MessageGuard.php', true ),
+			var_export( $support . 'Verdict.php', true ),
+			var_export( $support . 'WorkflowFacts.php', true ),
+			WorkflowFacts::class,
+			var_export( dirname( __DIR__, 2 ) . '/.github/workflows/stripe-test-mode.yml', true )
+		);
+
+		// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.system_calls_exec -- a PHP process of its own, run with fixed settings.
+		exec( escapeshellarg( PHP_BINARY ) . ' -d pcre.jit=0 -d pcre.backtrack_limit=10 -d max_execution_time=30 -r ' . escapeshellarg( $code ) . ' 2>&1', $output, $status );
+
+		$this->assertSame( 0, $status, implode( "\n", $output ) );
+
+		$this->assertStringContainsString( 'The expressions of the workflow could not be read', implode( "\n", $output ) );
+	}
+
+	/**
 	 * Returns one plant per fact.
 	 *
 	 * @since 0.2.0
@@ -90,10 +119,27 @@ final class StripeTestModeWorkflowTest extends TestCase {
 			'a run cancelled by the next'   => array( 'with cancel-in-progress: false', static fn( array $lines ): array => self::replaced( $lines, '/^    cancel-in-progress: false$/', '    cancel-in-progress: true' ) ),
 			'another concurrency group'     => array( 'is not the group stripe-test-mode', static fn( array $lines ): array => self::replaced( $lines, '/^    group: stripe-test-mode$/', '    group: ${{ github.workflow }}-${{ github.ref }}' ) ),
 			'a job without a time limit'    => array( 'the job verdict has no timeout-minutes', static fn( array $lines ): array => self::without( $lines, '/^        timeout-minutes: 5$/' ) ),
-			'a cli job'                     => array( 'The jobs besides the verdict are cli, live-conformance, three-d-secure, webhooks, not exactly', static fn( array $lines ): array => self::after( $lines, '/^jobs:$/', '    cli:' ) ),
-			'a job removed'                 => array( 'The jobs besides the verdict are live-conformance, three-d-secure, not exactly', static fn( array $lines ): array => self::without( $lines, '/^    webhooks:$/' ) ),
+			'a cli job'                     => array( 'The jobs are cli, live-conformance, three-d-secure, verdict, webhooks, not exactly', static fn( array $lines ): array => self::after( $lines, '/^jobs:$/', '    cli:' ) ),
+			'a job removed'                 => array( 'The jobs are live-conformance, three-d-secure, verdict, not exactly', static fn( array $lines ): array => self::without( $lines, '/^    webhooks:$/' ) ),
 			'a cli choice'                  => array( 'The parts input offers all, cli, conformance, three-d-secure, webhooks, not exactly', static fn( array $lines ): array => self::after( $lines, '/^                    - webhooks$/', '                    - cli' ) ),
 			'a part without a choice'       => array( 'The parts input offers all, conformance, three-d-secure, not exactly', static fn( array $lines ): array => self::without( $lines, '/^                    - webhooks$/' ) ),
+			'a verdict missing a need'      => array( 'the verdict needs live-conformance, three-d-secure, not exactly live-conformance, three-d-secure, webhooks.', static fn( array $lines ): array => self::replaced( $lines, '/^        needs: /', '        needs: [live-conformance, three-d-secure]' ) ),
+			'a condition without all'       => array( 'the job webhooks has no condition fromJSON(\'["all", "webhooks"]\')', static fn( array $lines ): array => self::replaced( $lines, '/^        if: .*"webhooks"/', "        if: github.repository == 'cirkuitnet/seocart-gateway-for-stripe' && contains(fromJSON('[\"webhooks\"]'), inputs.parts || 'all')" ) ),
+			'a condition on another part'   => array( 'the job three-d-secure has no condition fromJSON(\'["all", "three-d-secure"]\')', static fn( array $lines ): array => self::replaced( $lines, '/^        if: .*"three-d-secure"/', "        if: github.repository == 'cirkuitnet/seocart-gateway-for-stripe' && contains(fromJSON('[\"all\", \"cli\"]'), inputs.parts || 'all')" ) ),
+			'a condition on no part'        => array( 'the job live-conformance has no condition fromJSON(\'["all", "conformance"]\')', static fn( array $lines ): array => self::replaced( $lines, '/^        if: .*"conformance"/', "        if: github.repository == 'cirkuitnet/seocart-gateway-for-stripe'" ) ),
+			'a verdict job removed'         => array( 'The jobs are live-conformance, three-d-secure, webhooks, not exactly live-conformance, three-d-secure, verdict, webhooks.', static fn( array $lines ): array => self::without( $lines, '/^    verdict:$/' ) ),
+			'a verdict without always'      => array( 'its if must hold always()', static fn( array $lines ): array => self::replaced( $lines, '/^        if: always\(\) && /', "        if: github.repository == 'cirkuitnet/seocart-gateway-for-stripe'" ) ),
+			'a cli choice with a comment'   => array( 'The parts input offers all, cli, conformance, three-d-secure, webhooks, not exactly', static fn( array $lines ): array => self::after( $lines, '/^                    - webhooks$/', '                    - cli # back' ) ),
+			'a condition with no fallback'  => array( 'the job webhooks has no condition fromJSON(\'["all", "webhooks"]\'), written exactly', static fn( array $lines ): array => self::replaced( $lines, '/^        if: .*"webhooks"/', "        if: github.repository == 'cirkuitnet/seocart-gateway-for-stripe' && contains(fromJSON('[\"all\", \"webhooks\"]'), inputs.parts)" ) ),
+			'a condition and false'         => array( 'the job webhooks has no condition fromJSON(\'["all", "webhooks"]\'), written exactly', static fn( array $lines ): array => self::replaced( $lines, '/^        if: .*"webhooks"/', "        if: github.repository == 'cirkuitnet/seocart-gateway-for-stripe' && contains(fromJSON('[\"all\", \"webhooks\"]'), inputs.parts || 'all') && false" ) ),
+			'a condition false first'       => array( 'the job webhooks has no condition fromJSON(\'["all", "webhooks"]\'), written exactly', static fn( array $lines ): array => self::replaced( $lines, '/^        if: .*"webhooks"/', "        if: false && github.repository == 'cirkuitnet/seocart-gateway-for-stripe' && contains(fromJSON('[\"all\", \"webhooks\"]'), inputs.parts || 'all')" ) ),
+			'a negated condition'           => array( 'the job webhooks has no condition fromJSON(\'["all", "webhooks"]\'), written exactly', static fn( array $lines ): array => self::replaced( $lines, '/^        if: .*"webhooks"/', "        if: github.repository == 'cirkuitnet/seocart-gateway-for-stripe' && !contains(fromJSON('[\"all\", \"webhooks\"]'), inputs.parts || 'all')" ) ),
+			'a condition in a comment'      => array( 'the job webhooks has no condition fromJSON(\'["all", "webhooks"]\'), written exactly', static fn( array $lines ): array => self::replaced( $lines, '/^        if: .*"webhooks"/', "        if: github.repository == 'cirkuitnet/seocart-gateway-for-stripe' # contains(fromJSON('[\"all\", \"webhooks\"]'), inputs.parts || 'all')" ) ),
+			'a continued condition'         => array( 'the job webhooks has no condition fromJSON(\'["all", "webhooks"]\'), written exactly', static fn( array $lines ): array => self::after( $lines, '/^        if: .*"webhooks"/', '            && false' ) ),
+			'a verdict that never runs'     => array( 'its if must hold always(), written exactly', static fn( array $lines ): array => self::replaced( $lines, '/^        if: always\(\) && /', "        if: always() && github.repository == 'cirkuitnet/seocart-gateway-for-stripe' && false" ) ),
+			'always only in a comment'      => array( 'its if must hold always(), written exactly', static fn( array $lines ): array => self::replaced( $lines, '/^        if: always\(\) && /', "        if: github.repository == 'cirkuitnet/seocart-gateway-for-stripe' # always()" ) ),
+			'a choice with a space'         => array( 'The parts input offers - cli session, all, conformance, three-d-secure, webhooks, not exactly', static fn( array $lines ): array => self::after( $lines, '/^                    - webhooks$/', '                    - cli session' ) ),
+			'a choice with a hash'          => array( 'The parts input offers all, conformance, three-d-secure, webhooks#2, not exactly', static fn( array $lines ): array => self::replaced( $lines, '/^                    - webhooks$/', '                    - webhooks#2' ) ),
 		);
 	}
 
