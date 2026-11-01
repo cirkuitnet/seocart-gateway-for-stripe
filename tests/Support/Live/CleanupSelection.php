@@ -116,6 +116,31 @@ final class CleanupSelection {
 	}
 
 	/**
+	 * Returns the PaymentIntents recorded exchanges created at Stripe, a declined one included, as the run list holds them.
+	 *
+	 * The store keeps no Stripe id for a declined authorization, so Stripe's answer to the request
+	 * that created the intent is where a test learns it.
+	 *
+	 * @since 0.2.0
+	 *
+	 * @param list<array<mixed>> $exchanges The exchanges, each in a tape's shape.
+	 * @return array<string, string> Each store uuid, by Stripe's PaymentIntent id.
+	 */
+	public static function createdBy( array $exchanges ): array {
+		$intents = array();
+
+		foreach ( $exchanges as $exchange ) {
+			$created = self::createdIn( $exchange );
+
+			if ( null !== $created ) {
+				$intents[ $created[0] ] = $created[1];
+			}
+		}
+
+		return $intents;
+	}
+
+	/**
 	 * Returns the run list's line for an intent.
 	 *
 	 * @since 0.2.0

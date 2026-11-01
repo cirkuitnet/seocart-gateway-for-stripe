@@ -11,20 +11,23 @@ declare( strict_types=1 );
 
 namespace SEOCart\GatewayForStripe\Tests\Unit;
 
+use Brain\Monkey;
+use Brain\Monkey\Functions;
 use PHPUnit\Framework\TestCase;
 use SEOCart\GatewayForStripe\Tests\Support\Live\CleanupSelection;
 use SEOCart\GatewayForStripe\Tests\Support\Live\WorkflowStep;
 use SEOCart\GatewayForStripe\WebhookEndpoints;
+use SEOCart\Tests\Conformance\Payment\Exchange;
 
 /**
- * The cleanup cancels only the run's PaymentIntents that still wait, and deletes only the endpoints tagged with the run's installation: a planted intent or endpoint of anyone else is never picked. Every intent the conformance suite creates reaches the run list, read from the tapes it recorded, and only from those.
+ * The cleanup cancels only the run's PaymentIntents that still wait, and deletes only the endpoints tagged with the run's installation: a planted intent or endpoint of anyone else is never picked. Every intent the conformance suite creates reaches the run list, read from the tapes it recorded, and only from those; every intent a live test's placement creates, a declined one included, is read from Stripe's answers to the gateway's requests.
  *
  * Planted violations, each shown red and removed:
  * - in CleanupSelection::intentsToCancel(), the run list's check removed: the planted foreign intent is cancelled;
  * - in CleanupSelection::endpointsToDelete(), the installation's check removed: the planted endpoint of another installation is deleted;
- * - in CleanupSelection::createdIn(), the intent inside a declined answer's error not read: the declined intents the recorded suite left are missing;
+ * - in CleanupSelection::createdIn(), the intent inside a declined answer's error not read: the declined intents the recorded suite left are missing, and so is the declined placement's;
  * - in WorkflowStep::harvest(), the mark's check removed: the tape recorded before the mark is read;
- * - in WorkflowStep::harvest(), a tape as old as the mark read (`<` for `<=`): the tape from the mark's own second is listed.
+ * - in WorkflowStep::harvest(), a tape as old as the mark read (`>=` for `>`): the tape from the mark's own second is listed.
  *
  * @since 0.2.0
  */
@@ -194,6 +197,32 @@ final class LiveCleanupSelectionTest extends TestCase {
 	}
 
 	/**
+	 * Tests that a placement's exchanges, as the recording transport holds them, name each PaymentIntent Stripe created, a declined one inside its 402 among them, and nothing else.
+	 *
+	 * The two creations are Stripe's answers recorded in the suite's tapes: a decline, which the
+	 * store keeps no Stripe id of, and an intent that waits for 3-D Secure. A request that reads an
+	 * intent, and a creation whose answer was lost, created nothing a test can name.
+	 *
+	 * @since 0.2.0
+	 */
+	public function test_a_placements_exchanges_name_the_payment_intents_stripe_created_a_declined_one_included(): void {
+		$exchanges = array(
+			self::recorded( 'rule05-amounts-usd-us/9.json' ),
+			self::recorded( 'rule11-next-action-usd-us/1.json' ),
+			new Exchange( 'GET', 'https://api.stripe.com/v1/payment_intents/pi_3URUAnJyxgXirw330UlWtxoW', array(), null, 200, array(), '{"id": "pi_3URUAnJyxgXirw330UlWtxoW", "object": "payment_intent", "metadata": {"intent_uuid": "019b76da-a800-70a4-a92f-379c066db46e"}}' ),
+			new Exchange( 'POST', 'https://api.stripe.com' . CleanupSelection::CREATE_PATH, array(), 'amount=3000&metadata%5Bintent_uuid%5D=00000000-0000-5000-8000-000000000031', 0, array(), '', true ),
+		);
+
+		$this->assertSame(
+			array(
+				'pi_3URUALJyxgXirw330cuAooU9' => '019b76da-a800-793d-881f-d46b693af77b',
+				'pi_3URUAnJyxgXirw330UlWtxoW' => '019b76da-a800-70a4-a92f-379c066db46e',
+			),
+			CleanupSelection::createdBy( array_map( static fn( Exchange $exchange ): array => $exchange->toTape(), $exchanges ) )
+		);
+	}
+
+	/**
 	 * Tests that the run list is not added to without the mark made before the suite.
 	 *
 	 * @since 0.2.0
@@ -297,6 +326,22 @@ final class LiveCleanupSelectionTest extends TestCase {
 	}
 
 	/**
+	 * Returns a recorded exchange of the suite's tapes as the recording transport held it when it was sent: the request's address whole, and Stripe's answer.
+	 *
+	 * @since 0.2.0
+	 *
+	 * @param string $tape The tape file, under tests/tapes.
+	 * @return Exchange The exchange.
+	 */
+	private static function recorded( string $tape ): Exchange {
+		$taped    = (array) json_decode( (string) file_get_contents( dirname( __DIR__ ) . '/tapes/' . $tape ), true );
+		$request  = (array) $taped['request'];
+		$response = (array) $taped['response'];
+
+		return new Exchange( (string) $request['method'], 'https://' . $request['host'] . $request['path'], (array) $request['headers'], (string) $request['body'], (int) $response['status'], (array) $response['headers'], (string) $response['body'] );
+	}
+
+	/**
 	 * Writes a tape's exchange, recorded at a time.
 	 *
 	 * @since 0.2.0
@@ -331,11 +376,24 @@ final class LiveCleanupSelectionTest extends TestCase {
 	}
 
 	/**
+	 * Stands in for the WordPress function an exchange reads its address with, as PHP's own function it wraps behaves on a whole URL.
+	 *
+	 * @since 0.2.0
+	 */
+	protected function setUp(): void {
+		parent::setUp();
+		Monkey\setUp();
+		Functions\when( 'wp_parse_url' )->alias( 'parse_url' );
+	}
+
+	/**
 	 * Removes the directories the test made.
 	 *
 	 * @since 0.2.0
 	 */
 	protected function tearDown(): void {
+		Monkey\tearDown();
+
 		foreach ( $this->directories as $directory ) {
 			$files = new \RecursiveIteratorIterator( new \RecursiveDirectoryIterator( $directory, \FilesystemIterator::SKIP_DOTS ), \RecursiveIteratorIterator::CHILD_FIRST );
 

@@ -35,6 +35,7 @@ use SEOCart\Payment\Infrastructure\WebhookReceiptTables;
 use SEOCart\Platform\Logging\Reporter;
 use SEOCart\Support\Error\CodedException;
 use SEOCart\Tests\Conformance\Payment\ConformanceHarness;
+use SEOCart\Tests\Conformance\Payment\Exchange;
 use SEOCart\Tests\Conformance\Payment\RecordingTransport;
 use SEOCart\Tests\Support\Doubles\FrozenClock;
 use SEOCart\Tests\Support\KernelHooks;
@@ -305,7 +306,7 @@ abstract class LiveStripeCase extends ConformanceHarness {
 		// The checkout is written once, through the plugin's own registry, where the gateway registers with its context: a registry of the stub alone (readyCart()'s) gives none.
 		$this->writeCheckout( $cart->version, Gateway::ID );
 
-		$lastIntent = (int) $this->db->fetchValue( 'SELECT COALESCE(MAX(id), 0) FROM %i', $this->table( PaymentTables::INTENTS ) );
+		$sentBefore = count( $this->transport->exchanges() );
 
 		try {
 			$answer = $this->freshPlacement()->place( $this->placeInput( 'live-' . $variant, $token ), self::guest() );
@@ -322,18 +323,18 @@ abstract class LiveStripeCase extends ConformanceHarness {
 			);
 		} finally {
 			// Whatever became of the placement, even a failure thrown, Stripe may hold its intent.
-			$this->listIntentsAfter( $lastIntent );
+			$created = $this->listIntentsCreatedSince( $sentBefore );
 		}
 
 		$orderId = (int) $this->db->fetchValue( 'SELECT id FROM %i WHERE uuid = %s', $this->table( OrderTables::ORDERS ), (string) $answer['order_uuid'] );
 		$uuid    = (string) $this->db->fetchValue( 'SELECT uuid FROM %i WHERE order_id = %d ORDER BY id DESC LIMIT 1', $this->table( PaymentTables::INTENTS ), $orderId );
-		$id      = $this->intentRow( $uuid )['provider_intent_id'];
+		$id      = array_search( $uuid, $created, true );
 
 		return array(
 			'order_uuid'  => (string) $answer['order_uuid'],
 			'order_id'    => $orderId,
 			'intent_uuid' => $uuid,
-			'intent_id'   => $id,
+			'intent_id'   => is_string( $id ) ? $id : null,
 			'outcome'     => (string) $answer['outcome'],
 			'next_action' => is_array( $answer['next_action'] ?? null ) ? $answer['next_action'] : null,
 			'variant'     => $variant,
@@ -342,18 +343,25 @@ abstract class LiveStripeCase extends ConformanceHarness {
 	}
 
 	/**
-	 * Adds to the run list every intent the store recorded after a row that has Stripe's id: those a placement made, so the cleanup cancels any it left waiting.
+	 * Adds to the run list every PaymentIntent the gateway's requests created at Stripe since an exchange, so the cleanup cancels any a placement left waiting, and returns them.
+	 *
+	 * Read from Stripe's answers to the gateway's own requests, as the transport holds them: the
+	 * store keeps no Stripe id for a declined authorization, and Stripe answers a declined one with
+	 * the intent it created inside its error.
 	 *
 	 * @since 0.2.0
 	 *
-	 * @param int $lastIntent The id of the last intent row before the placement; 0 for none.
+	 * @param int $sentBefore How many exchanges the scenario had before the placement.
+	 * @return array<string, string> Each store uuid, by Stripe's PaymentIntent id.
 	 */
-	private function listIntentsAfter( int $lastIntent ): void {
-		$rows = $this->db->fetchAll( 'SELECT uuid, provider_intent_id FROM %i WHERE id > %d AND provider_intent_id IS NOT NULL ORDER BY id', $this->table( PaymentTables::INTENTS ), $lastIntent );
+	private function listIntentsCreatedSince( int $sentBefore ): array {
+		$created = CleanupSelection::createdBy( array_map( static fn( Exchange $exchange ): array => $exchange->toTape(), array_slice( $this->transport->exchanges(), $sentBefore ) ) );
 
-		foreach ( $rows as $row ) {
-			LiveRun::append( LiveRun::RUN_LIST, CleanupSelection::line( (string) $row['provider_intent_id'], (string) $row['uuid'] ) );
+		foreach ( $created as $intentId => $intentUuid ) {
+			LiveRun::append( LiveRun::RUN_LIST, CleanupSelection::line( $intentId, $intentUuid ) );
 		}
+
+		return $created;
 	}
 
 	/**

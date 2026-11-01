@@ -98,25 +98,19 @@ final class WorkflowStep {
 			return self::problems( array( 'The PaymentIntents the suite created cannot be listed: the mark made before the suite, or the run list, is missing.' ), $messages );
 		}
 
-		$intents  = array();
-		$recorded = 0;
+		$recorded = array();
 		$files    = glob( $tapes . '/*/*.json' );
 
 		foreach ( is_array( $files ) ? $files : array() as $file ) {
-			if ( filemtime( $file ) <= $since ) {
-				continue;
-			}
-
-			++$recorded;
-			$created = CleanupSelection::createdIn( (array) json_decode( (string) file_get_contents( $file ), true ) );
-
-			if ( null !== $created ) {
-				$intents[ $created[0] ] = CleanupSelection::line( $created[0], $created[1] );
+			if ( filemtime( $file ) > $since ) {
+				$recorded[] = (array) json_decode( (string) file_get_contents( $file ), true );
 			}
 		}
 
-		file_put_contents( $runList, implode( '', $intents ), FILE_APPEND | LOCK_EX );
-		fwrite( $messages, MessageGuard::redact( sprintf( "The run list: %1\$d PaymentIntents the suite created, read from the %2\$d tape files the run wrote.\n", count( $intents ), $recorded ) ) );
+		$intents = CleanupSelection::createdBy( $recorded );
+
+		file_put_contents( $runList, implode( '', array_map( array( CleanupSelection::class, 'line' ), array_keys( $intents ), $intents ) ), FILE_APPEND | LOCK_EX );
+		fwrite( $messages, MessageGuard::redact( sprintf( "The run list: %1\$d PaymentIntents the suite created, read from the %2\$d tape files the run wrote.\n", count( $intents ), count( $recorded ) ) ) );
 
 		return 0;
 	}
