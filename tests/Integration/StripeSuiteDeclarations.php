@@ -31,7 +31,8 @@ require_once dirname( __DIR__ ) . '/Support/Fixtures.php';
  * The declarations tell the suite's scrubber what of Stripe's answers is public, so a tape
  * holds no secret: a PaymentIntent's client secret becomes a placeholder; so does the account's id
  * where Stripe writes it, though the id is not hidden, as the publishable key the tape keeps,
- * public by design, carries it; and every other run of twenty letters, digits, `_` or `-` must be
+ * public by design, carries it; so does a refund's acquirer reference number, digits the suite
+ * could take for a card number; and every other run of twenty letters, digits, `_` or `-` must be
  * one of Stripe's ids or words named here.
  *
  * @since 0.2.0
@@ -124,21 +125,24 @@ trait StripeSuiteDeclarations {
 	}
 
 	/**
-	 * Returns the secrets Stripe issues in its answers, each replaced in a tape by its placeholder.
+	 * Returns what Stripe issues in its answers that a tape keeps only as its placeholder: its secrets, and a refund's acquirer reference, which can read as a card number.
 	 *
 	 * @since 0.2.0
 	 *
-	 * @return array<string, string> Each secret's regular expression, by its placeholder's name.
+	 * @return array<string, string> Each one's regular expression, by its placeholder's name.
 	 */
 	protected function providerSecrets(): array {
 		return array(
 			// A PaymentIntent's client secret: `client_secret` of every PaymentIntent answer and delivery, and the 3D Secure page's `payment_intent_client_secret`.
-			'client_secret'   => '/\bpi_[A-Za-z0-9]+_secret_[A-Za-z0-9]+\b/',
+			'client_secret'    => '/\bpi_[A-Za-z0-9]+_secret_[A-Za-z0-9]+\b/',
 			// The Stripe account's id, which names the store's account: the 3D Secure page's `merchant`.
 			// The placeholder hides nothing: the test publishable key the tape keeps, public by design, carries the id's sixteen characters.
-			'account_id'      => '/\bacct_[A-Za-z0-9]{16}\b/',
+			'account_id'       => '/\bacct_[A-Za-z0-9]{16}\b/',
 			// A webhook endpoint's signing secret: `secret` of the answer that creates the endpoint, which Stripe gives that once.
-			'endpoint_secret' => '/\bwhsec_[A-Za-z0-9]+\b/',
+			'endpoint_secret'  => '/\bwhsec_[A-Za-z0-9]+\b/',
+			// Not a secret: a Refund's `destination_details.card.reference`, the acquirer's reference number Stripe adds once the card network gives it.
+			// Its digits can pass the card checksum, which the suite refuses wherever it reads them, and the adapter reads none of it: the tape keeps the placeholder instead.
+			'refund_reference' => '/"destination_details":\s*\{\s*"card":\s*\{[^{}]*?"reference":\s*"\K[0-9]+(?=")/',
 		);
 	}
 

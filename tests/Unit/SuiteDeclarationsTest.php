@@ -11,18 +11,24 @@ declare( strict_types=1 );
 
 namespace SEOCart\GatewayForStripe\Tests\Unit;
 
+use Brain\Monkey;
+use Brain\Monkey\Functions;
 use PHPUnit\Framework\TestCase;
+use SEOCart\GatewayForStripe\Gateway;
 use SEOCart\GatewayForStripe\Tests\Integration\StripeSuiteDeclarations;
+use SEOCart\Tests\Conformance\Payment\Exchange;
 use SEOCart\Tests\Conformance\Payment\TapeRefused;
 use SEOCart\Tests\Conformance\Payment\TapeScrubber;
 
 /**
- * SEOCart's tape scrubber, built from StripeSuiteDeclarations as the suite builds it, keeps a test publishable key of any length Stripe may give and refuses a secret key in its place.
+ * SEOCart's tape scrubber, built from StripeSuiteDeclarations as the suite builds it, keeps a test publishable key of any length Stripe may give and refuses a secret key in its place, and keeps a refund's acquirer reference as its placeholder while a card number anywhere else is refused.
  *
- * Every key is made up as the test runs, so no key-shaped text is kept in the repository.
+ * Every key is made up as the test runs, so no key-shaped text is kept in the repository; the
+ * refund's ids are those of the suite's recording.
  *
- * Planted violation, shown red and removed: the publishable key's shape back to exactly 99
- * characters after `pk_test_` (each other length refused).
+ * Planted violations, each shown red and removed: the publishable key's shape back to exactly 99
+ * characters after `pk_test_` (each other length refused); the refund's reference taken out of
+ * providerSecrets() (refused as a card number).
  *
  * @since 0.2.0
  */
@@ -38,6 +44,46 @@ final class SuiteDeclarationsTest extends TestCase {
 	 * @var string
 	 */
 	private const ALPHANUMERIC = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+
+	/**
+	 * A refund's acquirer reference whose digits pass the card checksum: Stripe's published test card number stands in for it.
+	 *
+	 * @since 0.2.0
+	 *
+	 * @var string
+	 */
+	private const REFERENCE = '4242424242424242';
+
+	/**
+	 * Where the suite read the refund when it refused its recording.
+	 *
+	 * @since 0.2.0
+	 *
+	 * @var string
+	 */
+	private const WHERE = 'Exchange 5 of rule02-cell-usd-us';
+
+	/**
+	 * Stands in for the two WordPress functions the scrubber calls, each as PHP's own function it wraps behaves on a whole URL and on JSON.
+	 *
+	 * @since 0.2.0
+	 */
+	protected function setUp(): void {
+		parent::setUp();
+		Monkey\setUp();
+		Functions\when( 'wp_parse_url' )->alias( 'parse_url' );
+		Functions\when( 'wp_json_encode' )->alias( 'json_encode' );
+	}
+
+	/**
+	 * Tears Brain Monkey down.
+	 *
+	 * @since 0.2.0
+	 */
+	protected function tearDown(): void {
+		Monkey\tearDown();
+		parent::tearDown();
+	}
 
 	/**
 	 * Tests that a recording's settings keep a test publishable key of any length up to Stripe's 255 characters.
@@ -111,6 +157,111 @@ final class SuiteDeclarationsTest extends TestCase {
 			'past 255 characters' => array( 'pk_test_', 248 ),
 			'a restricted key'    => array( 'rk_test_', 99 ),
 			'a secret key'        => array( 'sk_test_', 99 ),
+		);
+	}
+
+	/**
+	 * Tests that a refund's acquirer reference number, digits that pass the card checksum, is kept as its placeholder in the answer that lists a PaymentIntent's refunds.
+	 *
+	 * @since 0.2.0
+	 */
+	public function test_a_refunds_acquirer_reference_is_kept_as_its_placeholder(): void {
+		$scrubber = $this->scrubber();
+		$clean    = $scrubber->exchange( self::refundList( self::REFERENCE ) );
+
+		$scrubber->scanExchange( $clean, self::WHERE );
+
+		$this->assertStringContainsString( '"reference": "{{secret:refund_reference}}",', $clean->responseBody );
+		$this->assertStringNotContainsString( self::REFERENCE, $clean->responseBody );
+		$this->assertStringContainsString( '"reference_status": "available"', $clean->responseBody );
+	}
+
+	/**
+	 * Tests that, without its declaration, the reference refuses the recording as a card number, as the suite refused a recording against Stripe's test mode.
+	 *
+	 * @since 0.2.0
+	 */
+	public function test_without_its_declaration_the_reference_is_refused_as_a_card_number(): void {
+		$secrets = $this->providerSecrets();
+
+		unset( $secrets['refund_reference'] );
+
+		$scrubber = new TapeScrubber( array(), $secrets, $this->publicIdShapes(), $this->publicDigestFields(), $this->publicCodes(), $this->publicHeaders() );
+
+		$this->expectException( TapeRefused::class );
+		$this->expectExceptionMessage( self::WHERE . ', its response body field data.0.destination_details.card.reference holds a card number' );
+
+		$scrubber->scanExchange( $scrubber->exchange( self::refundList( self::REFERENCE ) ), self::WHERE );
+	}
+
+	/**
+	 * Tests that the same digits anywhere else in the refund still refuse the recording: the declaration keeps the reference alone.
+	 *
+	 * @since 0.2.0
+	 */
+	public function test_a_card_number_elsewhere_in_the_refund_is_still_refused(): void {
+		$scrubber = $this->scrubber();
+
+		$this->expectException( TapeRefused::class );
+		$this->expectExceptionMessage( 'data.0.receipt_number holds a card number' );
+
+		$scrubber->scanExchange( $scrubber->exchange( self::refundList( self::REFERENCE, self::REFERENCE ) ), self::WHERE );
+	}
+
+	/**
+	 * Returns the exchange that lists a PaymentIntent's refunds, its one refund shaped as Stripe answers it at the pinned version once the acquirer's reference is available.
+	 *
+	 * @since 0.2.0
+	 *
+	 * @param string      $reference     The refund's `destination_details.card.reference`.
+	 * @param string|null $receiptNumber Its `receipt_number`; null for none.
+	 * @return Exchange The exchange.
+	 */
+	private static function refundList( string $reference, ?string $receiptNumber = null ): Exchange {
+		$body = <<<'JSON'
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "re_3URU9mJyxgXirw330poazZSA",
+      "object": "refund",
+      "amount": 1200,
+      "balance_transaction": "txn_3URU9mJyxgXirw330yFkqFxB",
+      "charge": "ch_3URU9mJyxgXirw330deyPUfC",
+      "created": 1792230243,
+      "currency": "usd",
+      "destination_details": {
+        "card": {
+          "reference": "%1$s",
+          "reference_status": "available",
+          "reference_type": "acquirer_reference_number",
+          "type": "refund"
+        },
+        "type": "card"
+      },
+      "metadata": {
+        "refund_uuid": "310a4340-7a1d-5fae-a018-db12389fd7ed"
+      },
+      "payment_intent": "pi_3URU9mJyxgXirw330FROUxix",
+      "payment_method": "pm_1URU9mJyxgXirw33PuxW6kdB",
+      "reason": null,
+      "receipt_number": %2$s,
+      "status": "succeeded"
+    }
+  ],
+  "has_more": false,
+  "url": "/v1/refunds"
+}
+JSON;
+
+		return new Exchange(
+			'GET',
+			'https://api.stripe.com/v1/refunds?payment_intent=pi_3URU9mJyxgXirw330FROUxix&limit=100',
+			array( 'stripe-version' => Gateway::API_VERSION ),
+			null,
+			200,
+			array( 'content-type' => 'application/json' ),
+			sprintf( $body, $reference, null === $receiptNumber ? 'null' : '"' . $receiptNumber . '"' )
 		);
 	}
 
