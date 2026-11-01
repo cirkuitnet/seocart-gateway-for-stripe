@@ -1,0 +1,16 @@
+{
+	"name": "seocart-gateway-for-stripe-browser",
+	"private": true,
+	"description": "Completes Stripe's 3-D Secure test page in a browser for the Stripe test mode workflow's live tests.",
+	"license": "GPL-3.0-or-later",
+	"type": "module",
+	"engines": {
+		"node": ">=24"
+	},
+	"scripts": {
+		"test": "node --test"
+	},
+	"dependencies": {
+		"playwright": "1.63.0"
+	}
+}

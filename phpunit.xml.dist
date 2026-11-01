@@ -19,6 +19,8 @@
 		this extension on SEOCart's integration bootstrap, which the command line selects:
 		`sh ../seocart/bin/ci/extension.sh integration .` does. Tests of the `conformance` group are
 		left out of a plain run: `sh ../seocart/bin/ci/extension.sh conformance . payments` runs them.
+		So are those of the `stripe-live` group, which call Stripe's test mode: only the Stripe test
+		mode workflow runs them (`sh bin/ci/stripe-test-mode.sh live <part>`), with test credentials.
 	-->
 	<testsuites>
 		<testsuite name="unit">
@@ -31,6 +33,7 @@
 	<groups>
 		<exclude>
 			<group>conformance</group>
+			<group>stripe-live</group>
 		</exclude>
 	</groups>
 </phpunit>

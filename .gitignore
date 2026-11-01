@@ -3,6 +3,7 @@
 /build/
 /vendor/
 /node_modules/
+/tests/browser/node_modules/
 
 # Test and tool output, and local configuration.
 /.phpunit.cache/
