@@ -28,7 +28,8 @@ use SEOCart\Tests\Conformance\Payment\TapeScrubber;
  *
  * Planted violations, each shown red and removed: the publishable key's shape back to exactly 99
  * characters after `pk_test_` (each other length refused); the refund's reference taken out of
- * providerSecrets() (refused as a card number).
+ * providerSecrets() (refused as a card number); the reference's declaration widened to any
+ * `"reference"` field (a charge's card reference, kept, no longer refused).
  *
  * @since 0.2.0
  */
@@ -209,6 +210,20 @@ final class SuiteDeclarationsTest extends TestCase {
 	}
 
 	/**
+	 * Tests that a `reference` field in another object, a charge's card details, still refuses the recording as a card number: the declaration reaches a refund's destination details alone.
+	 *
+	 * @since 0.2.0
+	 */
+	public function test_a_card_number_in_another_objects_reference_is_still_refused(): void {
+		$scrubber = $this->scrubber();
+
+		$this->expectException( TapeRefused::class );
+		$this->expectExceptionMessage( self::WHERE . ', its response body field payment_method_details.card.reference holds a card number' );
+
+		$scrubber->scanExchange( $scrubber->exchange( self::chargeAnswer( self::REFERENCE ) ), self::WHERE );
+	}
+
+	/**
 	 * Returns the exchange that lists a PaymentIntent's refunds, its one refund shaped as Stripe answers it at the pinned version once the acquirer's reference is available.
 	 *
 	 * @since 0.2.0
@@ -254,15 +269,50 @@ final class SuiteDeclarationsTest extends TestCase {
 }
 JSON;
 
-		return new Exchange(
-			'GET',
-			'https://api.stripe.com/v1/refunds?payment_intent=pi_3URU9mJyxgXirw330FROUxix&limit=100',
-			array( 'stripe-version' => Gateway::API_VERSION ),
-			null,
-			200,
-			array( 'content-type' => 'application/json' ),
-			sprintf( $body, $reference, null === $receiptNumber ? 'null' : '"' . $receiptNumber . '"' )
-		);
+		return self::answer( 'https://api.stripe.com/v1/refunds?payment_intent=pi_3URU9mJyxgXirw330FROUxix&limit=100', sprintf( $body, $reference, null === $receiptNumber ? 'null' : '"' . $receiptNumber . '"' ) );
+	}
+
+	/**
+	 * Returns the exchange that fetches a charge, whose `payment_method_details.card.reference` holds the digits.
+	 *
+	 * @since 0.2.0
+	 *
+	 * @param string $reference The charge's `payment_method_details.card.reference`.
+	 * @return Exchange The exchange.
+	 */
+	private static function chargeAnswer( string $reference ): Exchange {
+		$body = <<<'JSON'
+{
+  "id": "ch_3URU9mJyxgXirw330deyPUfC",
+  "object": "charge",
+  "amount": 1200,
+  "currency": "usd",
+  "payment_intent": "pi_3URU9mJyxgXirw330FROUxix",
+  "payment_method_details": {
+    "card": {
+      "brand": "visa",
+      "reference": "%s"
+    },
+    "type": "card"
+  },
+  "status": "succeeded"
+}
+JSON;
+
+		return self::answer( 'https://api.stripe.com/v1/charges/ch_3URU9mJyxgXirw330deyPUfC', sprintf( $body, $reference ) );
+	}
+
+	/**
+	 * Returns Stripe's answer to a GET at the pinned API version.
+	 *
+	 * @since 0.2.0
+	 *
+	 * @param string $url  The request's address.
+	 * @param string $body The answer's body.
+	 * @return Exchange The exchange.
+	 */
+	private static function answer( string $url, string $body ): Exchange {
+		return new Exchange( 'GET', $url, array( 'stripe-version' => Gateway::API_VERSION ), null, 200, array( 'content-type' => 'application/json' ), $body );
 	}
 
 	/**
