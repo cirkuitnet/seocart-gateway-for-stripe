@@ -11,14 +11,17 @@ declare( strict_types=1 );
 
 namespace SEOCart\GatewayForStripe\Tests\Integration\Live;
 
+use PHPUnit\Framework\AssertionFailedError;
 use SEOCart\Checkout\Application\ReceiveWebhook;
 use SEOCart\Checkout\Domain\CheckoutError;
 use SEOCart\Checkout\Interfaces\Rest\WebhookRoute;
+use SEOCart\Contracts\Payment\GatewayRegistry;
 use SEOCart\Contracts\Payment\Mode;
 use SEOCart\GatewayForStripe\Gateway;
 use SEOCart\GatewayForStripe\Tests\Integration\StripeSuiteDeclarations;
 use SEOCart\GatewayForStripe\Tests\Support\Live\CleanupSelection;
 use SEOCart\GatewayForStripe\Tests\Support\Live\EventSelection;
+use SEOCart\GatewayForStripe\Tests\Support\Live\ListenerThrows;
 use SEOCart\GatewayForStripe\Tests\Support\Live\LiveRun;
 use SEOCart\GatewayForStripe\Tests\Support\Live\MessageGuard;
 use SEOCart\Interfaces\Operations\ErrorTranslator;
@@ -40,6 +43,7 @@ use SEOCart\Tests\Support\KernelHooks;
 require_once dirname( __DIR__ ) . '/StripeSuiteDeclarations.php';
 require_once __DIR__ . '/StripeTestApi.php';
 require_once dirname( __DIR__, 2 ) . '/Support/Live/MessageGuard.php';
+require_once dirname( __DIR__, 2 ) . '/Support/Live/ListenerThrows.php';
 require_once dirname( __DIR__, 2 ) . '/Support/Live/LiveRun.php';
 require_once dirname( __DIR__, 2 ) . '/Support/Live/EventSelection.php';
 require_once dirname( __DIR__, 2 ) . '/Support/Live/CleanupSelection.php';
@@ -230,7 +234,51 @@ abstract class LiveStripeCase extends ConformanceHarness {
 		$this->stripe    = new StripeTestApi( (string) ( $settings[ Gateway::SECRET_KEY ] ?? '' ) );
 		$this->startedAt = new \DateTimeImmutable( '@' . ( time() - self::EVENTS_MARGIN ) );
 
+		self::keepRegistrationThrows();
+
 		parent::set_up();
+	}
+
+	/**
+	 * Names, beside a failed test's own message, what a listener of SEOCart's registration action threw, when one did: SEOCart's registry reports its class alone.
+	 *
+	 * @since 0.2.0
+	 *
+	 * @throws \Throwable The test's failure, its message completed when a listener threw.
+	 *
+	 * @param \Throwable $t The test's failure.
+	 */
+	protected function onNotSuccessfulTest( \Throwable $t ): void {
+		$thrown = ListenerThrows::taken();
+
+		if ( null !== $thrown ) {
+			$message = $t->getMessage() . ' ' . MessageGuard::say( 'A listener of the registration action threw %s', $thrown );
+
+			throw $t instanceof AssertionFailedError ? new AssertionFailedError( $message, 0, $t ) : new \LogicException( $message, 0, $t );
+		}
+
+		parent::onNotSuccessfulTest( $t );
+	}
+
+	/**
+	 * Wraps the listeners of SEOCart's registration action, the plugin's own among them, so a failing test can name what one threw, and forgets what an earlier test kept.
+	 *
+	 * Done before SEOCart's harness builds a registry. WordPress's copy of the hooks, which each
+	 * test's end puts back, then holds the wrapped listeners, and a listener wrapped already is left
+	 * as it is.
+	 *
+	 * @since 0.2.0
+	 */
+	private static function keepRegistrationThrows(): void {
+		global $wp_filter;
+
+		$hook = $wp_filter[ GatewayRegistry::ACTION ] ?? null;
+
+		if ( $hook instanceof \WP_Hook ) {
+			$hook->callbacks = ListenerThrows::wrap( $hook->callbacks );
+		}
+
+		ListenerThrows::taken();
 	}
 
 	/**
@@ -247,12 +295,14 @@ abstract class LiveStripeCase extends ConformanceHarness {
 	 */
 	protected function placeLive( string $token, ?string $code = null, int $units = 1 ): array {
 		$variant = $this->sellable( 10, self::PRICE );
+		$cart    = $this->startCart( array( $variant => $units ) );
 
 		if ( null !== $code ) {
 			$this->plantPromotion( $code );
+			$cart = $this->service->applyPromotionCode( $code, $cart->version, self::guest() );
 		}
 
-		$cart = $this->readyCart( array( $variant => $units ), null === $code ? array() : array( $code ) );
+		// The checkout is written once, through the plugin's own registry, where the gateway registers with its context: a registry of the stub alone (readyCart()'s) gives none.
 		$this->writeCheckout( $cart->version, Gateway::ID );
 
 		$lastIntent = (int) $this->db->fetchValue( 'SELECT COALESCE(MAX(id), 0) FROM %i', $this->table( PaymentTables::INTENTS ) );

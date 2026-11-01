@@ -166,7 +166,8 @@ trait StripeSuiteDeclarations {
 			// A webhook endpoint: its `id`, alone or in a list's `data`, and the request path that names it.
 			'we_'      => array( 24, 24 ),
 			// The publishable key, public by design: the tape's `publishable_key` setting and the 3D Secure page's `publishable_key`.
-			'pk_test_' => array( 99, 99 ),
+			// Stripe names a key's prefix and no length, and may change the length of its opaque strings up to 255 characters: any length to that passes.
+			'pk_test_' => array( 1, 247 ),
 		);
 	}
 
