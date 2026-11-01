@@ -1,10 +1,10 @@
 # Proves the adapter against Stripe's test mode with the repository's two test secrets: the
 # conformance suite with every request sent to Stripe; a shopper who never completes the bank's
 # page; 3-D Secure completed in a browser on Stripe's test page, then resumed; the webhook
-# endpoint set up at Stripe; Stripe's real events read back and delivered to the store, before,
-# after and twice around its own answers, and soaked; and whether Stripe's CLI opens a session
-# with the restricted key. Started by hand or weekly, never by a pull request or a push, so it is
-# never a check a merge waits for: a provider's outage must not block one.
+# endpoint set up at Stripe; and Stripe's real events read back and delivered to the store, before,
+# after and twice around its own answers, and soaked. Started by hand or weekly, never by a
+# pull request or a push, so it is never a check a merge waits for: a provider's outage must
+# not block one.
 #
 # SEOCart's extension workflow (extension-ci.yml) takes no secrets, so each job here repeats its
 # set-up: the two checkouts, the SEOCart commit chosen as it chooses it (core-ref on these events,
@@ -39,7 +39,6 @@ on:
                     - conformance
                     - three-d-secure
                     - webhooks
-                    - cli
                 default: all
             soak-size:
                 description: 'How many payments the webhook soak places, from 7 to 60.'
@@ -279,40 +278,8 @@ jobs:
               if: always()
               run: sh ext/bin/ci/stripe-test-mode.sh cleanup endpoints
 
-    cli:
-        if: github.repository == 'cirkuitnet/seocart-gateway-for-stripe' && contains(fromJSON('["all", "cli"]'), inputs.parts || 'all')
-        runs-on: ubuntu-24.04
-        timeout-minutes: 10
-        env:
-            # Stripe's CLI, the Linux archive of this release, and the SHA-256 its release lists in
-            # stripe-linux-checksums.txt; raise both together. 1.54.0 was published 2026-10-16.
-            STRIPE_CLI_VERSION: '1.54.0'
-            STRIPE_CLI_SHA256: 7e8b0693b56b3690bf0bd5d50f1f8a96bd8b84ad4efd1f08c493220b191e074b
-            # Stripe's CLI sends no usage data of the run.
-            STRIPE_CLI_TELEMETRY_OPTOUT: '1'
-        outputs:
-            ext-head: ${{ steps.heads.outputs.ext-head }}
-            core-head: ${{ steps.heads.outputs.core-head }}
-            stripe-cli: ${{ steps.session.outputs.stripe-cli }}
-        steps:
-            - *checkout-extension
-            - *check-secrets
-            - *choose-core
-            - *checkout-core
-            - *heads
-
-            - name: Install Stripe's CLI
-              run: sh ext/bin/ci/stripe-test-mode.sh cli-install
-
-            # The key reaches the CLI through its environment alone; a refusal fails the job.
-            - name: Open a session of Stripe's CLI with the restricted key
-              id: session
-              run: sh ext/bin/ci/stripe-test-mode.sh cli-session
-              env:
-                  STRIPE_API_KEY: ${{ secrets.STRIPE_TEST_RESTRICTED_KEY }}
-
     verdict:
-        needs: [live-conformance, three-d-secure, webhooks, cli]
+        needs: [live-conformance, three-d-secure, webhooks]
         if: always() && github.repository == 'cirkuitnet/seocart-gateway-for-stripe'
         runs-on: ubuntu-24.04
         timeout-minutes: 5

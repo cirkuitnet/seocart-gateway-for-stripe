@@ -55,7 +55,7 @@ final class LiveVerdictTest extends TestCase {
 		$this->assertStringContainsString( '`' . self::EXT . '`', $verdict['summary'] );
 		$this->assertStringContainsString( '`' . self::CORE . '`', $verdict['summary'] );
 		$this->assertStringContainsString( '17 tests, 307 assertions, 2 skipped', $verdict['summary'] );
-		$this->assertStringContainsString( '| Real deliveries forwarded by Stripe\'s CLI | none | open: not built yet | |', $verdict['summary'] );
+		$this->assertStringNotContainsString( 'CLI', $verdict['summary'], 'No proof of the run belongs to the CLI.' );
 		$this->assertTrue( Verdict::judge( self::needs(), '' )['green'], 'A scheduled run, which gives no parts, runs all.' );
 	}
 
@@ -69,7 +69,7 @@ final class LiveVerdictTest extends TestCase {
 		$this->assertFalse( $skipped['green'] );
 		$this->assertSame( array( 'The job three-d-secure was selected and ended skipped.' ), $skipped['problems'] );
 
-		$this->assertFalse( Verdict::judge( self::needs( array( 'cli' => 'failure' ) ), 'cli' )['green'] );
+		$this->assertFalse( Verdict::judge( self::needs( array( 'webhooks' => 'failure' ) ), 'webhooks' )['green'] );
 
 		$needs = self::needs();
 		unset( $needs['webhooks'] );
@@ -86,13 +86,13 @@ final class LiveVerdictTest extends TestCase {
 			array(
 				'live-conformance' => 'skipped',
 				'three-d-secure'   => 'skipped',
-				'cli'              => 'skipped',
 			)
 		);
 
 		$this->assertTrue( Verdict::judge( $needs, 'webhooks' )['green'] );
 		$this->assertFalse( Verdict::judge( $needs, 'all' )['green'] );
 		$this->assertFalse( Verdict::judge( $needs, 'everything' )['green'], 'An unknown part is refused.' );
+		$this->assertSame( array( 'The parts input `cli` names no part: all, conformance, three-d-secure, webhooks.' ), Verdict::judge( self::needs(), 'cli' )['problems'], 'The CLI is not a part.' );
 	}
 
 	/**

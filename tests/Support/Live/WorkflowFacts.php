@@ -19,8 +19,9 @@ namespace SEOCart\GatewayForStripe\Tests\Support\Live;
  * never be one of the checks a merge waits for; it reads the repository and nothing more; each
  * job runs only in this repository, as a fork has no secrets; a secret reaches only the step that
  * needs it, through that step's `env:`; nothing traces the shell, prints the environment or uploads
- * a file; one run at a time uses the account, and none is cancelled midway; and every job has a
- * time limit. The workflow is plain YAML in a known layout, two spaces deeper per level as the
+ * a file; one run at a time uses the account, and none is cancelled midway; every job has a
+ * time limit; and the jobs and the choices of the `parts` input are the parts the verdict judges, no
+ * other. The workflow is plain YAML in a known layout, two spaces deeper per level as the
  * repository's files are written, so its lines are read by their indentation; nothing parses it.
  *
  * @since 0.2.0
@@ -78,6 +79,7 @@ final class WorkflowFacts {
 		return array_merge(
 			self::triggers( $lines ),
 			self::jobs( $lines ),
+			self::parts( $lines ),
 			self::permissions( $lines ),
 			self::secrets( $lines ),
 			self::forbidden( $lines ),
@@ -136,6 +138,81 @@ final class WorkflowFacts {
 		}
 
 		return $problems;
+	}
+
+	/**
+	 * Checks that the jobs besides the verdict are the parts the verdict judges, and that the `parts` input offers `all` and each of them.
+	 *
+	 * A job or a choice outside Verdict::JOBS is a part the verdict would not judge.
+	 *
+	 * @since 0.2.0
+	 *
+	 * @param string[] $lines The lines.
+	 * @return list<string> What is wrong.
+	 * @phpstan-param list<string> $lines
+	 */
+	private static function parts( array $lines ): array {
+		$problems = array();
+		$jobs     = array_values( array_diff( array_keys( self::children( $lines, self::topLevel( $lines, 'jobs' ) ) ), array( 'verdict' ) ) );
+		$parts    = array_keys( Verdict::JOBS );
+		$choices  = self::choices( $lines );
+		$expected = array_merge( array( 'all' ), array_values( Verdict::JOBS ) );
+
+		sort( $jobs );
+		sort( $parts );
+		sort( $choices );
+		sort( $expected );
+
+		if ( $parts !== $jobs ) {
+			$problems[] = sprintf( 'The jobs besides the verdict are %1$s, not exactly %2$s.', array() === $jobs ? 'none' : implode( ', ', $jobs ), implode( ', ', $parts ) );
+		}
+
+		if ( $expected !== $choices ) {
+			$problems[] = sprintf( 'The parts input offers %1$s, not exactly %2$s.', array() === $choices ? 'nothing it lists' : implode( ', ', $choices ), implode( ', ', $expected ) );
+		}
+
+		return $problems;
+	}
+
+	/**
+	 * Returns the choices of the `parts` input: the items listed under `on.workflow_dispatch.inputs.parts.options`.
+	 *
+	 * @since 0.2.0
+	 *
+	 * @param string[] $lines The lines.
+	 * @return list<string> The choices; none when the input lists none.
+	 * @phpstan-param list<string> $lines
+	 */
+	private static function choices( array $lines ): array {
+		$at = self::topLevel( $lines, 'on' );
+
+		foreach ( array( 'workflow_dispatch', 'inputs', 'parts', 'options' ) as $key ) {
+			$at = self::children( $lines, $at )[ $key ] ?? null;
+		}
+
+		if ( null === $at ) {
+			return array();
+		}
+
+		$choices = array();
+		$depth   = self::indent( $lines[ $at ] );
+		$total   = count( $lines );
+
+		for ( $next = $at + 1; $next < $total; $next++ ) {
+			if ( self::isBlank( $lines[ $next ] ) ) {
+				continue;
+			}
+
+			if ( self::indent( $lines[ $next ] ) <= $depth ) {
+				break;
+			}
+
+			if ( 1 === preg_match( '/^\s*-\s+["\']?([^"\'\s]+)["\']?\s*$/', $lines[ $next ], $match ) ) {
+				$choices[] = $match[1];
+			}
+		}
+
+		return $choices;
 	}
 
 	/**

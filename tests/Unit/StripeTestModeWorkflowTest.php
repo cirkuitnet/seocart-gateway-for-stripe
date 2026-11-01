@@ -15,13 +15,15 @@ use PHPUnit\Framework\TestCase;
 use SEOCart\GatewayForStripe\Tests\Support\Live\WorkflowFacts;
 
 /**
- * The Stripe test mode workflow starts only on its schedule or by hand, has no job named ci, reads the repository and nothing more, runs each job only in this repository, gives a secret only to a step's env, never traces the shell, prints the environment or uploads a file, runs one at a time uncancelled, and limits every job's time. Each fact is planted broken, in memory, and found.
+ * The Stripe test mode workflow starts only on its schedule or by hand, has no job named ci, reads the repository and nothing more, runs each job only in this repository, gives a secret only to a step's env, never traces the shell, prints the environment or uploads a file, runs one at a time uncancelled, limits every job's time, and has as its jobs and as the choices of its parts input the parts the verdict judges and no other. Each fact is planted broken, in memory, and found.
  *
  * Pins, the PHP set-up, Composer and the Node.js version are SEOCart's check of workflows'
  * (`sh ../seocart/bin/ci/check-workflows.sh .`), which the required gates run.
  *
  * Planted violations, each shown red and removed:
  * - `push:` added to the workflow's `on:` in the file: the first test fails naming the triggers;
+ * - a `cli` job, then a `cli` choice of the `parts` input, added back to the file: the first test fails
+ *   naming the jobs, then the choices;
  * - in WorkflowFacts::secrets(), only the lines holding `secrets.` read, and no comment's line: the
  *   bracket form, `toJSON(secrets)`, the capitals and the shell comment are not found;
  * - in WorkflowFacts::secrets(), an expression ended at its first `}}`, quoted or not: the secrets
@@ -67,15 +69,15 @@ final class StripeTestModeWorkflowTest extends TestCase {
 		return array(
 			'a push trigger'                => array( 'The workflow starts on push, schedule, workflow_dispatch', static fn( array $lines ): array => self::after( $lines, '/^on:$/', '    push:' ) ),
 			'a pull request trigger'        => array( 'The workflow starts on pull_request, schedule, workflow_dispatch', static fn( array $lines ): array => self::after( $lines, '/^on:$/', '    pull_request:' ) ),
-			'a job named ci'                => array( 'a job is named ci', static fn( array $lines ): array => self::replaced( $lines, '/^    cli:$/', '    ci:' ) ),
+			'a job named ci'                => array( 'a job is named ci', static fn( array $lines ): array => self::after( $lines, '/^jobs:$/', '    ci:' ) ),
 			'a wider permission'            => array( 'the permissions are not exactly `contents: read`', static fn( array $lines ): array => self::after( $lines, '/^    contents: read$/', '    issues: write' ) ),
 			'a job writing everything'      => array( 'the permissions are not exactly `contents: read`', static fn( array $lines ): array => self::after( $lines, '/^    verdict:$/', '        permissions: write-all' ) ),
 			'a job without the guard'       => array( 'the job three-d-secure does not run only in', static fn( array $lines ): array => self::replaced( $lines, '/^        if: .*three-d-secure/', "        if: contains(fromJSON('[\"all\", \"three-d-secure\"]'), inputs.parts || 'all')" ) ),
 			'a secret in a run'             => array( 'a secret is used other than as the value of an entry of a step\'s env', static fn( array $lines ): array => self::replaced( $lines, '/^              run: sh ext\/bin\/ci\/stripe-test-mode.sh heads$/', '              run: echo "${{ secrets.STRIPE_TEST_RESTRICTED_KEY }}"' ) ),
-			'a secret in a job\'s env'      => array( 'a secret is used other than as the value of an entry of a step\'s env', static fn( array $lines ): array => self::after( $lines, '/^            STRIPE_CLI_TELEMETRY_OPTOUT:/', '            STRIPE_API_KEY: ${{ secrets.STRIPE_TEST_RESTRICTED_KEY }}' ) ),
+			'a secret in a job\'s env'      => array( 'a secret is used other than as the value of an entry of a step\'s env', static fn( array $lines ): array => self::after( self::after( $lines, '/^        timeout-minutes: 30$/', '        env:' ), '/^        env:$/', '            STRIPE_API_KEY: ${{ secrets.STRIPE_TEST_RESTRICTED_KEY }}' ) ),
 			'a secret in an action\'s with' => array( 'a secret is used other than as the value of an entry of a step\'s env', static fn( array $lines ): array => self::after( $lines, '/^                  persist-credentials: false$/', '                  token: ${{ secrets.STRIPE_TEST_RESTRICTED_KEY }}' ) ),
 			'a secret in brackets in a run' => array( 'a secret is used other than as the value of an entry of a step\'s env', static fn( array $lines ): array => self::replaced( $lines, '/^              run: sh ext\/bin\/ci\/stripe-test-mode.sh heads$/', '              run: echo "${{ secrets[\'STRIPE_TEST_RESTRICTED_KEY\'] }}"' ) ),
-			'a secret in brackets in env'   => array( 'a secret is used other than as the value of an entry of a step\'s env', static fn( array $lines ): array => self::replaced( $lines, '/^                  STRIPE_API_KEY: /', '                  STRIPE_API_KEY: ${{ secrets[\'STRIPE_TEST_RESTRICTED_KEY\'] }}' ) ),
+			'a secret in brackets in env'   => array( 'a secret is used other than as the value of an entry of a step\'s env', static fn( array $lines ): array => self::replaced( $lines, '/^                  STRIPE_TEST_RESTRICTED_KEY: /', '                  STRIPE_TEST_RESTRICTED_KEY: ${{ secrets[\'STRIPE_TEST_RESTRICTED_KEY\'] }}' ) ),
 			'every secret as JSON'          => array( 'a secret is used other than as the value of an entry of a step\'s env', static fn( array $lines ): array => self::replaced( $lines, '/^                  STRIPE_TEST_MODE_NEEDS: /', '                  STRIPE_TEST_MODE_NEEDS: ${{ toJSON(secrets) }}' ) ),
 			'a secret in capitals'          => array( 'a secret is used other than as the value of an entry of a step\'s env', static fn( array $lines ): array => self::replaced( $lines, '/^              run: sh ext\/bin\/ci\/stripe-test-mode.sh heads$/', '              run: echo "${{ SECRETS.STRIPE_TEST_RESTRICTED_KEY }}"' ) ),
 			'a secret in a shell comment'   => array( 'a secret is used other than as the value of an entry of a step\'s env', static fn( array $lines ): array => self::after( $lines, '/^                  if \[ -n "\$CORE_REF" \]; then$/', '                  # ${{ secrets.STRIPE_TEST_RESTRICTED_KEY }}' ) ),
@@ -88,6 +90,10 @@ final class StripeTestModeWorkflowTest extends TestCase {
 			'a run cancelled by the next'   => array( 'with cancel-in-progress: false', static fn( array $lines ): array => self::replaced( $lines, '/^    cancel-in-progress: false$/', '    cancel-in-progress: true' ) ),
 			'another concurrency group'     => array( 'is not the group stripe-test-mode', static fn( array $lines ): array => self::replaced( $lines, '/^    group: stripe-test-mode$/', '    group: ${{ github.workflow }}-${{ github.ref }}' ) ),
 			'a job without a time limit'    => array( 'the job verdict has no timeout-minutes', static fn( array $lines ): array => self::without( $lines, '/^        timeout-minutes: 5$/' ) ),
+			'a cli job'                     => array( 'The jobs besides the verdict are cli, live-conformance, three-d-secure, webhooks, not exactly', static fn( array $lines ): array => self::after( $lines, '/^jobs:$/', '    cli:' ) ),
+			'a job removed'                 => array( 'The jobs besides the verdict are live-conformance, three-d-secure, not exactly', static fn( array $lines ): array => self::without( $lines, '/^    webhooks:$/' ) ),
+			'a cli choice'                  => array( 'The parts input offers all, cli, conformance, three-d-secure, webhooks, not exactly', static fn( array $lines ): array => self::after( $lines, '/^                    - webhooks$/', '                    - cli' ) ),
+			'a part without a choice'       => array( 'The parts input offers all, conformance, three-d-secure, not exactly', static fn( array $lines ): array => self::without( $lines, '/^                    - webhooks$/' ) ),
 		);
 	}
 

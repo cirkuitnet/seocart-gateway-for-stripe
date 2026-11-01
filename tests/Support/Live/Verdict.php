@@ -16,8 +16,7 @@ namespace SEOCart\GatewayForStripe\Tests\Support\Live;
  *
  * A job the run's `parts` input selected must succeed: a skipped one would read green and prove
  * nothing. A job not selected is expected skipped. The suite's job must report its counts, and the
- * skips the replay has, no other. Forwarding real deliveries through Stripe's CLI is not built yet,
- * so its line says so without failing the run.
+ * skips the replay has, no other.
  *
  * @since 0.2.0
  */
@@ -34,15 +33,14 @@ final class Verdict {
 		'live-conformance' => 'conformance',
 		'three-d-secure'   => 'three-d-secure',
 		'webhooks'         => 'webhooks',
-		'cli'              => 'cli',
 	);
 
 	/**
-	 * What the run proves, each with the job that proves it; null for a proof not built yet.
+	 * What the run proves, each with the job that proves it.
 	 *
 	 * @since 0.2.0
 	 *
-	 * @var array<string, string|null>
+	 * @var array<string, string>
 	 */
 	public const PROOFS = array(
 		'The conformance suite, every request sent to Stripe\'s test mode' => 'live-conformance',
@@ -50,8 +48,6 @@ final class Verdict {
 		'A shopper who never acts: voided at the window\'s end, cancelled at Stripe `abandoned`' => 'three-d-secure',
 		'Real events read back from Stripe, delivered before, after and twice, and soaked' => 'webhooks',
 		'Webhook endpoint set up at Stripe, reused, and removed' => 'webhooks',
-		'Stripe\'s CLI opens a session with the restricted key' => 'cli',
-		'Real deliveries forwarded by Stripe\'s CLI' => null,
 	);
 
 	/**
@@ -116,9 +112,7 @@ final class Verdict {
 		$lines = array( '## Stripe test mode: ' . ( array() === $problems ? 'green' : 'red' ), '', sprintf( 'Parts: `%s`', MessageGuard::redact( $parts ) ), '', '| What is proved | Job | Result | Counts |', '| --- | --- | --- | --- |' );
 
 		foreach ( self::PROOFS as $proof => $job ) {
-			$lines[] = null === $job
-				? sprintf( '| %s | none | open: not built yet | |', $proof )
-				: sprintf( '| %1$s | %2$s | %3$s | %4$s |', $proof, $job, self::result( $needs, $job ), self::counts( self::outputs( $needs, $job ) ) );
+			$lines[] = sprintf( '| %1$s | %2$s | %3$s | %4$s |', $proof, $job, self::result( $needs, $job ), self::counts( self::outputs( $needs, $job ) ) );
 		}
 
 		$lines[] = '';
@@ -198,7 +192,7 @@ final class Verdict {
 	}
 
 	/**
-	 * Describes a job's facts of the run: the nonce, the soak's seed, the events' API versions, the CLI's version.
+	 * Describes a job's facts of the run: the nonce, the soak's seed, the events' API versions.
 	 *
 	 * @since 0.2.0
 	 *
@@ -208,7 +202,7 @@ final class Verdict {
 	private static function facts( array $outputs ): string {
 		$facts = array();
 
-		foreach ( array( 'nonce', 'seed', 'api-versions', 'stripe-cli' ) as $fact ) {
+		foreach ( array( 'nonce', 'seed', 'api-versions' ) as $fact ) {
 			if ( isset( $outputs[ $fact ] ) && '' !== $outputs[ $fact ] ) {
 				$facts[] = $fact . ': ' . $outputs[ $fact ];
 			}

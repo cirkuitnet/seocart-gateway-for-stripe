@@ -23,15 +23,6 @@
 #                   Cancels what the run left waiting at Stripe and, given endpoints, deletes the
 #                   webhook endpoint of the run's installation, which only the webhooks job sets
 #                   up; then removes the settings file, the run list and the report.
-#   cli-install     Fetches Stripe's CLI at STRIPE_CLI_VERSION, refuses it unless its SHA-256 is
-#                   STRIPE_CLI_SHA256, and puts it on the job's PATH.
-#   cli-session     Opens a session of Stripe's CLI with the key in STRIPE_API_KEY: its signing
-#                   secret, taken only as the whole answer on one line, is kept masked and never
-#                   printed. A refusal (a non-zero exit other than timeout's 124) fails the job
-#                   with one fixed sentence, whether the CLI named the permission
-#                   rak_stripecli_session_write, and its exit code; no answer within the time
-#                   (124), or an exit 0 with any other answer, fails it saying so. Never the CLI's
-#                   own output.
 #   verdict         Says, for each thing the run proves, which job proves it and how it went
 #                   (STRIPE_TEST_MODE_NEEDS, STRIPE_TEST_MODE_PARTS), and fails a red run.
 #
@@ -219,80 +210,6 @@ cleanup() {
 	return "$status"
 }
 
-cli_install() {
-	if [ -z "${STRIPE_CLI_VERSION:-}" ] || [ -z "${STRIPE_CLI_SHA256:-}" ]; then
-		fail 'STRIPE_CLI_VERSION and STRIPE_CLI_SHA256 are both required.'
-	fi
-	archive="stripe_${STRIPE_CLI_VERSION}_linux_x86_64.tar.gz"
-	mkdir -p "$work"
-	curl -fsSL --retry 3 -o "$work/$archive" "https://github.com/stripe/stripe-cli/releases/download/v${STRIPE_CLI_VERSION}/$archive"
-	if ! echo "$STRIPE_CLI_SHA256  $work/$archive" | sha256sum --check --strict; then
-		rm -f "$work/$archive"
-		fail "The Stripe CLI archive $archive does not have the SHA-256 STRIPE_CLI_SHA256 pins: nothing was extracted."
-	fi
-	mkdir -p "$work/bin"
-	tar -xzf "$work/$archive" -C "$work/bin" stripe
-	rm -f "$work/$archive"
-	if [ -n "${GITHUB_PATH:-}" ]; then
-		echo "$work/bin" >>"$GITHUB_PATH"
-	fi
-	echo "Stripe's CLI $STRIPE_CLI_VERSION is installed, its archive's SHA-256 checked."
-}
-
-# Succeeds when the CLI's answer is one line holding a signing secret and nothing else. A mask
-# covers only the first line of what it is given, so an answer of any other shape is neither
-# masked nor printed: the step calls it unreadable.
-is_signing_secret() {
-	newline='
-'
-	case $1 in
-		*"$newline"*) return 1 ;;
-	esac
-	printf '%s\n' "$1" | grep -Eqx 'whsec_[A-Za-z0-9]+'
-}
-
-cli_session() {
-	[ -n "${STRIPE_API_KEY:-}" ] || fail 'STRIPE_API_KEY is empty: the step sets it from the secret STRIPE_TEST_RESTRICTED_KEY.'
-	umask 077
-	mkdir -p "$work"
-	errors=$work/listen.err
-	status=0
-	# The key reaches the CLI through STRIPE_API_KEY alone, never --api-key: a process's arguments
-	# can be read by others on the machine.
-	secret=$(timeout 120 stripe listen --print-secret 2>"$errors") || status=$?
-	if [ "$status" -eq 0 ] && is_signing_secret "$secret"; then
-		mask "$secret"
-		rm -f "$errors"
-		output stripe-cli "$STRIPE_CLI_VERSION session opened"
-		echo "Stripe's CLI opened a session with the restricted key; its signing secret is masked and kept by no one."
-		return 0
-	fi
-	# What went wrong, told apart by the exit code alone, never in the CLI's own words: timeout
-	# exits 124 when the CLI did not answer in time, and only another failure is a refusal.
-	case $status in
-		0)
-			output stripe-cli "${STRIPE_CLI_VERSION:-unknown} answer unreadable"
-			echo "::error::the Stripe CLI's answer was unreadable: it exited 0 without printing a signing secret alone on one line, so no session is proved"
-			;;
-		124)
-			output stripe-cli "${STRIPE_CLI_VERSION:-unknown} no answer"
-			echo '::error::the Stripe CLI gave no answer within 120 seconds: the restricted key was neither accepted nor refused'
-			;;
-		*)
-			if grep -q rak_stripecli_session_write "$errors" 2>/dev/null; then
-				named=yes
-			else
-				named=no
-			fi
-			output stripe-cli "${STRIPE_CLI_VERSION:-unknown} refused, exit $status"
-			echo '::error::the Stripe CLI refused the restricted key'
-			echo "Its message named the permission rak_stripecli_session_write: $named. Its exit code: $status."
-			;;
-	esac
-	rm -f "$errors"
-	exit 1
-}
-
 verdict() {
 	php "$step_php" verdict
 }
@@ -305,8 +222,6 @@ case ${1:-} in
 	soak-size) soak_size ;;
 	live) live "${2:-}" ;;
 	cleanup) cleanup "${2:-}" ;;
-	cli-install) cli_install ;;
-	cli-session) cli_session ;;
 	verdict) verdict ;;
-	*) fail 'usage: stripe-test-mode.sh check-secrets|settings|heads|conformance|soak-size|live <part>|cleanup [endpoints]|cli-install|cli-session|verdict' ;;
+	*) fail 'usage: stripe-test-mode.sh check-secrets|settings|heads|conformance|soak-size|live <part>|cleanup [endpoints]|verdict' ;;
 esac
