@@ -14,6 +14,8 @@ not.
   and read from Stripe's signed webhook deliveries, whose endpoint is set up at Stripe when the settings are saved.
   Test and live modes; Stripe accounts in the United States, in USD, GBP and EUR.
 - A dispute Stripe reports now names its order in SEOCart's log.
+- The card form inside SEOCart's checkout: the shopper types the card into Stripe's own fields on the checkout
+  page, and a bank's confirmation (3D Secure) completes there too.
 
 ## [0.1.0]
 
