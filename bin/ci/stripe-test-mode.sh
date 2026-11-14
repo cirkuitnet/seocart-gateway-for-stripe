@@ -19,17 +19,28 @@
 #   soak-size       Refuses a soak-size input outside 7 to 60 (SOAK_SIZE).
 #   live <part>     Runs the live tests of a part, three-d-secure or webhooks: exactly the part's
 #                   tests must run, and each pass, none skipped.
+#   site            Installs the site the checkout's browser tests run against, in the runner's
+#                   temporary directory: SEOCart's scripts built, SEOCart and this plugin installed
+#                   from the zips built here, the gateway configured in test mode from the settings
+#                   file with its webhooks left out, the runner's own address trusted as a proxy,
+#                   and the site served by PHP's built-in server (WORDPRESS_VERSION and the
+#                   SEOCART_CI_DB_* variables, as SEOCart's extension workflow sets them). Its
+#                   administrator's password is made for the run and masked.
+#   checkout        Runs the checkout's browser tests (tests/browser/specs) against that site: each
+#                   must pass, none skipped. Whatever became of them, the PaymentIntents the site
+#                   created go on the run list.
 #   cleanup [endpoints]
 #                   Cancels what the run left waiting at Stripe and, given endpoints, deletes the
 #                   webhook endpoint of the run's installation, which only the webhooks job sets
-#                   up; then removes the settings file, the run list and the report.
+#                   up; then stops the site's server, and removes the settings file, the run list,
+#                   the report and the site.
 #   verdict         Says, for each thing the run proves, which job proves it and how it went
 #                   (STRIPE_TEST_MODE_NEEDS, STRIPE_TEST_MODE_PARTS), and fails a red run.
 #
-# Nothing here prints a key, a signing secret, a client secret or an event's body: PHPUnit's
-# output is passed through the tests' own filter of credential-shaped text, and the shell never
-# traces its commands. Outside GitHub Actions (a dry run), RUNNER_TEMP, GITHUB_OUTPUT and
-# GITHUB_STEP_SUMMARY may be left unset.
+# Nothing here prints a key, a signing secret, a client secret, a password or an event's body:
+# PHPUnit's and Playwright's output is passed through the tests' own filter of credential-shaped
+# text, and the shell never traces its commands. Outside GitHub Actions (a dry run), RUNNER_TEMP,
+# GITHUB_OUTPUT and GITHUB_STEP_SUMMARY may be left unset.
 
 set -eu
 
@@ -45,6 +56,9 @@ work=${RUNNER_TEMP:-${TMPDIR:-/tmp}}/stripe-test-mode
 settings=$work/settings.json
 run_list=$work/run-list
 report=$work/report
+site_dir=$work/site
+site_env=$work/site.env
+site_url=http://127.0.0.1:${STRIPE_TEST_MODE_HTTP_PORT:-8890}
 outputs=${GITHUB_OUTPUT:-/dev/stdout}
 
 # Writes one output of the step.
@@ -84,10 +98,15 @@ check_secrets() {
 	echo 'Both secrets are set, each a test mode key.'
 }
 
+# A random value of 32 hexadecimal digits.
+random_hex() {
+	od -An -N16 -tx1 /dev/urandom | tr -d ' \n'
+}
+
 # The signing secret the store checks the deliveries of the run with: made for the run, never
 # one of Stripe's.
 run_secret() {
-	printf 'whsec_%s' "$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
+	printf 'whsec_%s' "$(random_hex)"
 }
 
 write_settings() {
@@ -195,6 +214,97 @@ live() {
 	return "$status"
 }
 
+# Runs WP-CLI against the checkout's site. Standard input is closed so that no command waits for a
+# prompt, unless the caller gives one.
+site_wp() {
+	wp --path="$site_dir" "$@"
+}
+
+site() {
+	[ -f "$settings" ] || fail 'The settings file is missing: run the settings step first.'
+	for name in WORDPRESS_VERSION SEOCART_CI_DB_HOST SEOCART_CI_DB_USER SEOCART_CI_DB_PASSWORD SEOCART_CI_DB_NAME; do
+		eval "is_set=\${$name+set}"
+		[ "${is_set:-}" = set ] || fail "site: the environment variable $name is not set."
+	done
+	umask 077
+
+	echo 'Building SEOCart'\''s scripts and the two zips.'
+	(cd "$core" && npm ci && npm run build)
+	php "$core/bin/build-zip.php"
+	php "$core/bin/build-zip.php" --plugin="$ext"
+
+	echo 'Installing WordPress.'
+	sh "$core/bin/ci/download-wordpress.sh" "$WORDPRESS_VERSION" "$site_dir"
+	# The passwords are read from standard input so that they never appear in the process table.
+	printf '%s\n' "$SEOCART_CI_DB_PASSWORD" | site_wp config create --dbname="$SEOCART_CI_DB_NAME" \
+		--dbuser="$SEOCART_CI_DB_USER" --dbhost="$SEOCART_CI_DB_HOST" --dbprefix=checkout_ --prompt=dbpass >/dev/null
+	site_wp config set WP_ENVIRONMENT_TYPE local </dev/null
+	site_wp config set DISABLE_WP_CRON true --raw </dev/null
+	# The tests reach the site from this runner, as a proxy would, and give each test an address of
+	# its own in X-Forwarded-For: the store allows one client five placements and resumes an hour.
+	site_wp config set SEOCART_TRUSTED_PROXIES '127.0.0.0/8, ::1' </dev/null
+	password=$(random_hex)
+	mask "$password"
+	printf '%s\n' "$password" | site_wp core install --url="$site_url" --title='SEOCart checkout' --admin_user=admin \
+		--admin_email=admin@example.org --skip-email --prompt=admin_password >/dev/null
+
+	echo 'Installing SEOCart and the adapter from their zips.'
+	for zip in "$core"/dist/seocart-*.zip "$ext"/dist/seocart-gateway-for-stripe-*.zip; do
+		site_wp plugin install "$zip" --activate </dev/null
+	done
+	site_wp seocart gateway configure stripe --mode=test --from-file="$settings" --no-webhooks --user=admin </dev/null
+
+	# Opcache off, for the reason SEOCart's install smoke test gives.
+	php -d opcache.enable=0 -d opcache.enable_cli=0 -S "${site_url#http://}" -t "$site_dir" >"$work/server.log" 2>&1 &
+	echo "$!" >"$work/server.pid"
+	attempts=0
+	until curl -s -o /dev/null "$site_url/license.txt"; do
+		attempts=$((attempts + 1))
+		[ "$attempts" -lt 20 ] || fail 'PHP'\''s built-in server did not start.'
+		sleep 1
+	done
+
+	printf 'WP_BASE_URL=%s\nWP_USERNAME=admin\nWP_PASSWORD=%s\n' "$site_url" "$password" >"$site_env"
+	chmod 600 "$site_env"
+	echo "The site answers at $site_url, SEOCart and the adapter active, the gateway in test mode."
+}
+
+# Adds the site's Stripe PaymentIntents to the run list, each as Stripe's id and the store's uuid.
+harvest_site() {
+	prefix=$(site_wp db prefix </dev/null)
+	site_wp db query "SELECT provider_intent_id, uuid FROM ${prefix}seocart_payment_intents WHERE gateway_id = 'stripe' AND provider_intent_id LIKE 'pi\\_%'" \
+		--skip-column-names </dev/null | tr '\t' ' ' >>"$run_list"
+	echo "$(grep -c '^pi_' "$run_list" || true) PaymentIntents on the run list."
+}
+
+checkout() {
+	[ -f "$settings" ] || fail 'The settings file is missing: run the settings step first.'
+	[ -f "$site_env" ] || fail 'The site is missing: run the site step first.'
+	status=0
+	# The site's address and administrator, and the settings file's path, which the tests give PHP
+	# to read the publishable key from: none is an argument a process list would show.
+	(
+		cd "$ext/tests/browser"
+		set -a
+		# shellcheck disable=SC1090 # The site's file, written by the site step.
+		. "$site_env"
+		set +a
+		SEOCART_TAPE_SETTINGS=$settings
+		export SEOCART_TAPE_SETTINGS
+		filtered "$work/checkout.out" npx playwright test --config playwright.config.mjs --forbid-only
+	) || status=$?
+	harvest_site || status=1
+	passed=$(sed -n 's/^ *\([0-9][0-9]*\) passed.*/\1/p' "$work/checkout.out" | tail -n 1)
+	skipped=$(sed -n 's/^ *\([0-9][0-9]*\) skipped.*/\1/p' "$work/checkout.out" | tail -n 1)
+	output tests "${passed:-0}"
+	output skipped "${skipped:-0}"
+	if [ "${passed:-0}" -eq 0 ] || [ "${skipped:-0}" -ne 0 ]; then
+		printf '::error::The checkout'\''s browser tests passed %s and skipped %s: each must run and pass.\n' "${passed:-0}" "${skipped:-0}"
+		status=1
+	fi
+	return "$status"
+}
+
 cleanup() {
 	case ${1:-} in
 		'' | endpoints) ;;
@@ -205,6 +315,9 @@ cleanup() {
 		php "$ext/tests/Integration/Live/cleanup.php" "$settings" "$run_list" ${1:+"$1"} || status=$?
 	else
 		echo 'cleanup: no settings file, so this job made no request to Stripe.'
+	fi
+	if [ -f "$work/server.pid" ]; then
+		kill "$(cat "$work/server.pid")" 2>/dev/null || true
 	fi
 	rm -rf "$work"
 	return "$status"
@@ -221,7 +334,9 @@ case ${1:-} in
 	conformance) conformance ;;
 	soak-size) soak_size ;;
 	live) live "${2:-}" ;;
+	site) site ;;
+	checkout) checkout ;;
 	cleanup) cleanup "${2:-}" ;;
 	verdict) verdict ;;
-	*) fail 'usage: stripe-test-mode.sh check-secrets|settings|heads|conformance|soak-size|live <part>|cleanup [endpoints]|verdict' ;;
+	*) fail 'usage: stripe-test-mode.sh check-secrets|settings|heads|conformance|soak-size|live <part>|site|checkout|cleanup [endpoints]|verdict' ;;
 esac

@@ -1,10 +1,10 @@
 # Proves the adapter against Stripe's test mode with the repository's two test secrets: the
 # conformance suite with every request sent to Stripe; a shopper who never completes the bank's
 # page; 3-D Secure completed in a browser on Stripe's test page, then resumed; the webhook
-# endpoint set up at Stripe; and Stripe's real events read back and delivered to the store, before,
-# after and twice around its own answers, and soaked. Started by hand or weekly, never by a
-# pull request or a push, so it is never a check a merge waits for: a provider's outage must
-# not block one.
+# endpoint set up at Stripe; Stripe's real events read back and delivered to the store, before,
+# after and twice around its own answers, and soaked; and the checkout's card form in a browser,
+# on a site installed on the runner. Started by hand or weekly, never by a pull request or a
+# push, so it is never a check a merge waits for: a provider's outage must not block one.
 #
 # SEOCart's extension workflow (extension-ci.yml) takes no secrets, so each job here repeats its
 # set-up: the two checkouts, the SEOCart commit chosen as it chooses it (core-ref on these events,
@@ -14,7 +14,8 @@
 # Each secret reaches only the steps that need it, through their env. The tests read the
 # credentials from one file, readable by its owner alone, in the runner's temporary directory,
 # outside the checkout; it is never uploaded, and every job removes it at its end. Nothing is
-# committed, pushed or uploaded: a run against Stripe writes its recordings on the runner only.
+# committed, pushed or uploaded: a run against Stripe writes its recordings on the runner only,
+# and the browser tests take no trace, video or screenshot.
 # Every job removes what it left at Stripe that it can: a PaymentIntent cannot be deleted, so
 # those the run left waiting are cancelled; the webhooks job, which alone sets up the webhook
 # endpoint of the run's installation, deletes it.
@@ -39,6 +40,7 @@ on:
                     - conformance
                     - three-d-secure
                     - webhooks
+                    - checkout
                 default: all
             soak-size:
                 description: 'How many payments the webhook soak places, from 7 to 60.'
@@ -207,20 +209,24 @@ jobs:
             - *setup-php
             - *prepare-wordpress
 
-            - name: Set up Node.js
+            - &setup-node
+              name: Set up Node.js
               uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
               with:
                   node-version-file: seocart/.nvmrc
 
-            - name: Install the browser script's dependencies
+            - &browser-dependencies
+              name: Install the browser scripts' dependencies
               working-directory: ext/tests/browser
               run: npm ci
 
-            - name: Install Chromium for Playwright
+            - &chromium
+              name: Install Chromium for Playwright
               working-directory: ext/tests/browser
               run: npx playwright install --with-deps chromium
 
-            - name: Test the browser script's output
+            - &browser-unit
+              name: Test the browser scripts
               working-directory: ext/tests/browser
               run: node --test
 
@@ -278,8 +284,46 @@ jobs:
               if: always()
               run: sh ext/bin/ci/stripe-test-mode.sh cleanup endpoints
 
+    checkout:
+        if: github.repository == 'cirkuitnet/seocart-gateway-for-stripe' && contains(fromJSON('["all", "checkout"]'), inputs.parts || 'all')
+        runs-on: ubuntu-24.04
+        timeout-minutes: 40
+        outputs:
+            ext-head: ${{ steps.heads.outputs.ext-head }}
+            core-head: ${{ steps.heads.outputs.core-head }}
+            tests: ${{ steps.run.outputs.tests }}
+            skipped: ${{ steps.run.outputs.skipped }}
+        services:
+            mysql: *mysql
+        steps:
+            - *checkout-extension
+            - *check-secrets
+            - *choose-core
+            - *checkout-core
+            - *heads
+            - *setup-php
+            - *setup-node
+            - *browser-dependencies
+            - *chromium
+            - *browser-unit
+            - *settings
+
+            # WordPress on PHP's built-in server, SEOCart and this plugin installed from the zips
+            # built here, the gateway configured from the settings file, its webhooks left out.
+            - name: Install a site with SEOCart and the adapter, the gateway in test mode
+              run: sh ext/bin/ci/stripe-test-mode.sh site
+
+            # The card form on SEOCart's payment page: Stripe's Payment Element, a bank's challenge
+            # passed and failed, declines, retries, a reload and a change of the amount. The
+            # PaymentIntents the site created go on the run list, which the cleanup works from.
+            - name: Run the checkout's card form in a browser against Stripe's test mode
+              id: run
+              run: sh ext/bin/ci/stripe-test-mode.sh checkout
+
+            - *cleanup
+
     verdict:
-        needs: [live-conformance, three-d-secure, webhooks]
+        needs: [live-conformance, three-d-secure, webhooks, checkout]
         if: always() && github.repository == 'cirkuitnet/seocart-gateway-for-stripe'
         runs-on: ubuntu-24.04
         timeout-minutes: 5

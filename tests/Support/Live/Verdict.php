@@ -33,6 +33,7 @@ final class Verdict {
 		'live-conformance' => 'conformance',
 		'three-d-secure'   => 'three-d-secure',
 		'webhooks'         => 'webhooks',
+		'checkout'         => 'checkout',
 	);
 
 	/**
@@ -48,6 +49,7 @@ final class Verdict {
 		'A shopper who never acts: voided at the window\'s end, cancelled at Stripe `abandoned`' => 'three-d-secure',
 		'Real events read back from Stripe, delivered before, after and twice, and soaked' => 'webhooks',
 		'Webhook endpoint set up at Stripe, reused, and removed' => 'webhooks',
+		'The checkout\'s card form in a browser: Stripe\'s Payment Element, a bank\'s challenge passed and failed, declines, retries, a reload and a new amount' => 'checkout',
 	);
 
 	/**
