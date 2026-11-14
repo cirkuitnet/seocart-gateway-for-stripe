@@ -138,8 +138,9 @@
 
 	/**
 	 * Returns the billing details Stripe is sent with the card, from the checkout's billing
-	 * address. Every member is sent, empty when the checkout has none: the Element collects none
-	 * of them, and Stripe refuses a confirmation that leaves one out.
+	 * address. Every member is sent, null when the checkout has none: the Element collects none
+	 * of them, Stripe.js refuses a confirmation that leaves one out, and Stripe refuses an empty
+	 * text as an attempt to unset it.
 	 *
 	 * @param {Object|null} billing The billing address, by the checkout's field names.
 	 * @return {Object} The billing details, by Stripe's.
@@ -147,12 +148,14 @@
 	function billingDetails( billing ) {
 		const given = billing || {};
 		const text = ( name ) =>
-			'string' === typeof given[ name ] ? given[ name ].trim() : '';
+			( 'string' === typeof given[ name ] && given[ name ].trim() ) ||
+			null;
 
 		return {
-			name: [ text( 'first_name' ), text( 'last_name' ) ]
-				.filter( Boolean )
-				.join( ' ' ),
+			name:
+				[ text( 'first_name' ), text( 'last_name' ) ]
+					.filter( Boolean )
+					.join( ' ' ) || null,
 			email: text( 'email' ),
 			phone: text( 'phone' ),
 			address: {

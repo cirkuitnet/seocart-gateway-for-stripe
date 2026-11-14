@@ -6,7 +6,9 @@
 // Planted violations, each shown red and removed:
 // - in canMakePayment(), the maximum's check dropped: the table's row above the maximum fails;
 // - in action(), a failed confirmation reported as completed: the decline's mapping fails;
-// - in unmount(), the Element not destroyed: the unmount test fails.
+// - in unmount(), the Element not destroyed: the unmount test fails;
+// - in billingDetails(), an absent detail sent as empty text, which Stripe refuses on a retry
+//   (parameter_invalid_empty): the no-address test fails.
 
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -246,7 +248,7 @@ test('confirm() sends no payment data once Stripe accepts the fields, and refuse
 test('action() confirms the store\'s PaymentIntent with the card typed and the billing address, and answers completed', async () => {
 	const { island, seen } = load();
 	const handle = await island.mount(element('div'), context());
-	const billing = { country: 'US', first_name: 'Ada', last_name: 'Lovelace', line1: '1 Main Street', city: 'Springfield', region: 'IL', postcode: '62701', email: 'ada@example.com' };
+	const billing = { country: 'US', first_name: 'Ada', last_name: 'Lovelace', line1: '1 Main Street', line2: ' ', city: 'Springfield', region: 'IL', postcode: '62701', email: 'ada@example.com' };
 
 	assert.equal(await handle.action(STEP, { ...RESUME, billing }), 'completed');
 	assert.equal(seen.confirmations.length, 1);
@@ -262,8 +264,8 @@ test('action() confirms the store\'s PaymentIntent with the card typed and the b
 				billing_details: {
 					name: 'Ada Lovelace',
 					email: 'ada@example.com',
-					phone: '',
-					address: { line1: '1 Main Street', line2: '', city: 'Springfield', state: 'IL', postal_code: '62701', country: 'US' },
+					phone: null,
+					address: { line1: '1 Main Street', line2: null, city: 'Springfield', state: 'IL', postal_code: '62701', country: 'US' },
 				},
 			},
 		},
@@ -271,16 +273,16 @@ test('action() confirms the store\'s PaymentIntent with the card typed and the b
 	});
 });
 
-test('action() sends every billing detail empty when the checkout gives no address', async () => {
+test('action() sends every billing detail, null, when the checkout gives no address: never an empty text, which Stripe refuses', async () => {
 	const { island, seen } = load();
 
 	await (await island.mount(element('div'), context())).action(STEP, RESUME);
 
 	assert.deepEqual(plain(seen.confirmations[0].confirmParams.payment_method_data.billing_details), {
-		name: '',
-		email: '',
-		phone: '',
-		address: { line1: '', line2: '', city: '', state: '', postal_code: '', country: '' },
+		name: null,
+		email: null,
+		phone: null,
+		address: { line1: null, line2: null, city: null, state: null, postal_code: null, country: null },
 	});
 });
 
