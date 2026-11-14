@@ -1,16 +1,18 @@
 {
 	"name": "seocart-gateway-for-stripe-browser",
 	"private": true,
-	"description": "Completes Stripe's 3-D Secure test page in a browser for the Stripe test mode workflow's live tests.",
+	"description": "The browser side of the Stripe adapter's tests: the card form's own tests, its checkout in a browser against Stripe's test mode, and Stripe's 3-D Secure test page completed for the live tests.",
 	"license": "GPL-3.0-or-later",
 	"type": "module",
 	"engines": {
 		"node": ">=24"
 	},
 	"scripts": {
-		"test": "node --test"
+		"test": "node --test",
+		"test:checkout": "playwright test --config playwright.config.mjs"
 	},
 	"dependencies": {
+		"@playwright/test": "1.63.0",
 		"playwright": "1.63.0"
 	}
 }

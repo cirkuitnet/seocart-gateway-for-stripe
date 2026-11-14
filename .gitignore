@@ -12,6 +12,7 @@
 /phpcs.xml
 /phpstan.neon
 /phpunit.xml
+/tests/browser/test-results/
 
 # Editors and operating systems.
 /.idea/
