@@ -14,7 +14,7 @@ SEOCart Gateway for Stripe connects the SEOCart store plugin to Stripe.
 
 SEOCart Gateway for Stripe is a free extension of SEOCart, the free, open-source store plugin for WordPress. It needs SEOCart, installed and active.
 
-It takes card payments through Stripe. A payment is authorized when the order is placed and captured later, in full or in part, or cancelled; a captured payment can be refunded in full or in part. When the card's bank asks the shopper to confirm a payment (3D Secure), the shopper is sent to confirm it with the bank. Card details never reach your site: SEOCart sends Stripe only the reference that Stripe's own form gives it. Stripe reports what happens to each payment through a webhook endpoint, which the extension sets up at Stripe when its settings are saved.
+It takes card payments through Stripe. A payment is authorized when the order is placed and captured later, in full or in part, or cancelled; a captured payment can be refunded in full or in part. The shopper types the card into Stripe's own form, inside SEOCart's checkout; when the card's bank asks the shopper to confirm a payment (3D Secure), the bank's check opens on the checkout page too. Card details never reach your site: Stripe's form sends them to Stripe. Stripe reports what happens to each payment through a webhook endpoint, which the extension sets up at Stripe when its settings are saved.
 
 It has a test mode and a live mode, each with its own keys. It takes payments for Stripe accounts in the United States, in US dollars, pounds sterling and euros.
 
@@ -40,9 +40,19 @@ Stripe is a payment processing service. SEOCart Gateway for Stripe uses its API 
 * Terms of use: https://stripe.com/legal/ssa
 * Privacy policy: https://stripe.com/privacy
 
+= Stripe.js =
+
+Stripe.js is Stripe's script for taking payment details in the browser. SEOCart Gateway for Stripe loads it on the checkout page to show Stripe's card form, and to let the card's bank confirm a payment there (3D Secure).
+
+* Endpoint: `https://js.stripe.com/v3/`
+* Data sent: Sent to Stripe by the shopper's browser, never by your site: the card details the shopper types into Stripe's form, and the billing address the checkout holds (name, email address, phone number and postal address). Stripe.js also collects information about the browser and device, and sets its own cookies, to prevent fraud.
+* When: On the checkout page, once Stripe is the payment method selected, and when the shopper places the order with it. Nothing is loaded on any other page, or before Stripe is selected.
+* Terms of use: https://stripe.com/legal/ssa
+* Privacy policy: https://stripe.com/privacy
+
 == Source code and build steps ==
 
-The complete, human-readable source code of this plugin is public at https://github.com/cirkuitnet/seocart-gateway-for-stripe. It is built with SEOCart's tools, from a SEOCart checkout beside it: `php ../seocart/bin/build-zip.php --plugin=.` assembles the installable zip in `dist/`.
+The complete, human-readable source code of this plugin is public at https://github.com/cirkuitnet/seocart-gateway-for-stripe. It is built with SEOCart's tools, from a SEOCart checkout beside it: `php ../seocart/bin/build-zip.php --plugin=.` assembles the installable zip in `dist/`. The checkout's card form, `assets/island.js`, is hand-written JavaScript and ships as written: it has no build step.
 
 == Changelog ==
 

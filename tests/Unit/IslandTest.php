@@ -14,6 +14,7 @@ namespace SEOCart\GatewayForStripe\Tests\Unit;
 use PHPUnit\Framework\TestCase;
 use SEOCart\Contracts\Payment\Mode;
 use SEOCart\GatewayForStripe\Gateway;
+use SEOCart\GatewayForStripe\Island;
 use SEOCart\GatewayForStripe\StripeApi;
 
 /**
@@ -139,15 +140,15 @@ final class IslandTest extends TestCase {
 	}
 
 	/**
-	 * Tests that Stripe.js's address is the only one the script names, in its code or its comments.
+	 * Tests that Stripe.js's address, as the readme discloses it, is the only one the script names, in its code or its comments.
 	 *
 	 * @since 0.2.0
 	 */
 	public function test_stripe_js_is_the_only_address_named(): void {
 		preg_match_all( '#[a-z]+://[^\s\'"`)]*#i', self::script(), $addresses );
 
-		$this->assertSame( array( 'https://js.stripe.com/v3/' ), array_values( array_unique( $addresses[0] ) ) );
-		$this->assertSame( 1, preg_match( "#^\tconst STRIPE_JS = 'https://js\\.stripe\\.com/v3/';$#m", self::code() ) );
+		$this->assertSame( array( Island::stripeJs()->endpoint ), array_values( array_unique( $addresses[0] ) ), 'Stripe.js, as the readme discloses it.' );
+		$this->assertSame( Island::stripeJs()->endpoint, self::constant( 'STRIPE_JS' ) );
 	}
 
 	/**
