@@ -11,13 +11,10 @@
 
 import { pathToFileURL } from 'node:url';
 
-// The controls of Stripe's test page, by what the test asks for: a button's accessible name, looked
-// for in every frame, as the page puts its challenge in a frame. Stripe does not document the page's
-// markup, so these are the one place to change when it changes.
-export const CONTROLS = {
-	authorize: /^\s*(complete|authori[sz]e)\b/i,
-	fail: /^\s*fail\b/i,
-};
+import { CONTROLS, press } from './press.mjs';
+
+// The controls, as press.mjs names them, which the input's `control` picks from.
+export { CONTROLS };
 
 // How long the page may take to load, the control to appear, and Stripe to send the shopper back.
 const PAGE_MS = 60_000;
@@ -53,24 +50,6 @@ export function wordFromReturn(returned, control) {
 // Prints an outcome, or an error reduced to its word, and nothing else.
 export function report(outcome, write = (text) => process.stdout.write(text)) {
 	write(`${typeof outcome === 'string' && WORDS.includes(outcome) ? outcome : outcomeWord(outcome)}\n`);
-}
-
-// Presses the first button of a name in any frame of the page; false when none appeared in time.
-async function press(page, name, until) {
-	while (Date.now() < until) {
-		for (const frame of page.frames()) {
-			const button = frame.getByRole('button', { name });
-
-			if ((await button.count().catch(() => 0)) > 0) {
-				await button.first().click({ timeout: CONTROL_MS });
-				return true;
-			}
-		}
-
-		await new Promise((resolve) => setTimeout(resolve, 500));
-	}
-
-	return false;
 }
 
 // Opens the page, presses the control and waits for Stripe to send the shopper back to the store.
