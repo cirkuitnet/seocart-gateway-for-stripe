@@ -61,11 +61,14 @@ spl_autoload_register(
  * The registration with SEOCart: one hook, named by its string. SEOCart fires this action, with
  * its gateway registry, the first time something needs a payment gateway, and never on a request
  * that needs none. The name is written out because this file runs before SEOCart is loaded;
- * tests/Unit/RegistrationTest.php holds it equal to the constant SEOCart declares it in.
+ * tests/Unit/RegistrationTest.php holds it equal to the constant SEOCart declares it in. Once the
+ * gateway is registered, the checkout's card form listens for the pages that show the payment
+ * methods (src/Island.php).
  */
 add_action(
 	'seocart_register_payment_gateways',
 	static function ( \SEOCart\Contracts\Payment\GatewayRegistry $registry ): void {
 		$registry->register( new \SEOCart\GatewayForStripe\Gateway( $registry->context( \SEOCart\GatewayForStripe\Gateway::ID ) ) );
+		\SEOCart\GatewayForStripe\Island::listen();
 	}
 );
