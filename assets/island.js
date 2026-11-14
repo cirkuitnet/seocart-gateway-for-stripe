@@ -41,8 +41,10 @@
 	const MAXIMUM_MINOR = 99999999;
 	const KEY_PREFIXES = { test: 'pk_test_', live: 'pk_live_' };
 
-	// Stripe's error types whose message is written for the shopper.
-	const SHOPPER_ERRORS = [ 'card_error', 'validation_error' ];
+	// Stripe's errors whose message is written for the shopper: by their type, and the failed bank
+	// check, which Stripe types as a request's error.
+	const SHOPPER_TYPES = [ 'card_error', 'validation_error' ];
+	const SHOPPER_CODES = [ 'payment_intent_authentication_failure' ];
 
 	// The one load of Stripe.js on the page, and one Stripe object per publishable key.
 	let loading = null;
@@ -63,6 +65,19 @@
 		error.code = code;
 
 		return error;
+	}
+
+	/**
+	 * Returns the message of a Stripe error when Stripe wrote it for the shopper, or empty.
+	 *
+	 * @param {Object} error Stripe's error.
+	 * @return {string} The message.
+	 */
+	function shopperMessage( error ) {
+		return SHOPPER_TYPES.includes( error.type ) ||
+			SHOPPER_CODES.includes( error.code )
+			? String( error.message || '' )
+			: '';
 	}
 
 	/**
@@ -242,9 +257,7 @@
 					// The Element shows what is wrong beside the field.
 					throw islandError(
 						String( error.code || error.type || 'invalid' ),
-						SHOPPER_ERRORS.includes( error.type )
-							? String( error.message || '' )
-							: ''
+						shopperMessage( error )
 					);
 				}
 
@@ -281,9 +294,7 @@
 					return 'completed';
 				}
 
-				declined = SHOPPER_ERRORS.includes( error.type )
-					? String( error.message || '' )
-					: '';
+				declined = shopperMessage( error );
 
 				return 'failed';
 			},

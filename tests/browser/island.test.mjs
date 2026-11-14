@@ -306,13 +306,20 @@ test('a confirmation Stripe refuses answers failed, and the decline then shows S
 	assert.equal(el.children.filter((child) => child.className === 'seocart-notice is-error').length, 1, 'One notice at a time.');
 });
 
-test('a failed bank challenge answers failed; an error not written for the shopper shows nothing', async () => {
-	const failed = { error: { type: 'card_error', code: 'payment_intent_authentication_failure', message: 'We are unable to authenticate your payment method.' } };
-
-	assert.equal(await (await load(fakeStripe({ confirm: failed })).island.mount(element('div'), context())).action(STEP, RESUME), 'failed');
-
+test('a failed bank challenge, which Stripe types as a request\'s error, answers failed and shows Stripe\'s message', async () => {
+	// As Stripe answered a challenge whose Fail control was pressed, on the test mode's challenge card.
+	const failed = { error: { type: 'invalid_request_error', code: 'payment_intent_authentication_failure', message: 'We are unable to authenticate your payment method.' } };
 	const el = element('div');
-	const handle = await load(fakeStripe({ confirm: { error: { type: 'invalid_request_error', message: 'No such payment_intent: pi_example' } } })).island.mount(el, context());
+	const handle = await load(fakeStripe({ confirm: failed })).island.mount(el, context());
+
+	assert.equal(await handle.action(STEP, RESUME), 'failed');
+	handle.showError({ code: 'declined', message: '' });
+	assert.equal(el.children[0].textContent, 'We are unable to authenticate your payment method.');
+});
+
+test('an error Stripe did not write for the shopper answers failed and shows nothing', async () => {
+	const el = element('div');
+	const handle = await load(fakeStripe({ confirm: { error: { type: 'invalid_request_error', code: 'resource_missing', message: 'No such payment_intent: pi_example' } } })).island.mount(el, context());
 
 	assert.equal(await handle.action(STEP, RESUME), 'failed');
 	handle.showError({ code: 'declined', message: '' });
