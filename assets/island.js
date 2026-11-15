@@ -50,6 +50,10 @@
 	// later, or paid.
 	const CONFIRMED = [ 'requires_capture', 'succeeded' ];
 
+	// How long the Payment Element may take to be ready, in milliseconds: it is ready within a few
+	// seconds on a broadband connection, and this leaves a slow mobile one many times that.
+	const READY_MS = 30000;
+
 	// The one load of Stripe.js on the page, and one Stripe object per publishable key.
 	let loading = null;
 	const clients = new Map();
@@ -190,8 +194,9 @@
 
 	/**
 	 * Shows the Payment Element for a payment, and returns the mount's handle once the Element is
-	 * ready. Rejects when Stripe.js or the Element cannot be loaded: the checkout then shows the
-	 * method as unavailable.
+	 * ready. Rejects when Stripe.js or the Element cannot be loaded, or the Element is not ready
+	 * within READY_MS: the checkout then shows the method as unavailable, and the others stay
+	 * selectable.
 	 *
 	 * @param {HTMLElement} el  The element to show it in, fresh for this mount.
 	 * @param {Object}      ctx The payment context.
@@ -232,12 +237,24 @@
 		frame.className = 'seocart-island__frame';
 		el.append( frame );
 
+		// The form is given up, and the method shown unavailable, when the Element neither loads nor
+		// fails within the limit: a frame that never answers would otherwise hold the checkout.
 		await new Promise( ( resolve, reject ) => {
-			payment.on( 'ready', resolve );
-			payment.on( 'loaderror', () => {
+			const fail = ( code ) => {
+				window.clearTimeout( limit );
 				payment.destroy();
-				reject( islandError( 'element_failed' ) );
+				reject( islandError( code ) );
+			};
+			const limit = window.setTimeout(
+				() => fail( 'element_timeout' ),
+				READY_MS
+			);
+
+			payment.on( 'ready', () => {
+				window.clearTimeout( limit );
+				resolve();
 			} );
+			payment.on( 'loaderror', () => fail( 'element_failed' ) );
 			payment.mount( frame );
 		} );
 

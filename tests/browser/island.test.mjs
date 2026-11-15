@@ -67,6 +67,8 @@ function plain(value) {
 }
 
 // A stand-in for Stripe.js: one Stripe object per call, its elements and its answers, recorded.
+// `loads` is true for an Element that becomes ready, false for one that fails to load, and
+// 'never' for one whose frame never answers.
 function fakeStripe({ submit = {}, confirm = { paymentIntent: { status: 'requires_capture' } }, loads = true } = {}) {
 	const seen = { keys: [], elements: [], created: [], confirmations: [], destroyed: 0 };
 
@@ -88,7 +90,9 @@ function fakeStripe({ submit = {}, confirm = { paymentIntent: { status: 'require
 								listeners[event] = listener;
 							},
 							mount() {
-								queueMicrotask(() => (loads ? listeners.ready?.() : listeners.loaderror?.({})));
+								if (loads !== 'never') {
+									queueMicrotask(() => (loads ? listeners.ready?.() : listeners.loaderror?.({})));
+								}
 							},
 							destroy() {
 								seen.destroyed++;
@@ -110,14 +114,22 @@ function fakeStripe({ submit = {}, confirm = { paymentIntent: { status: 'require
 }
 
 // Runs the script with a window that has the stand-in Stripe.js already, or none, and returns
-// what it registered and the page it ran in.
+// what it registered and the page it ran in. The window's timers are recorded and never run by
+// themselves: a test runs one with fire().
 function load(stripe = fakeStripe(), { withStripe = true } = {}) {
 	const registered = [];
 	const head = element('head');
+	const timers = [];
 	const sandbox = {
 		console,
 		document: { head, createElement: element },
 		seocart: { payments: { register: (island) => registered.push(island) } },
+		setTimeout: (run, ms) => timers.push({ run, ms, cleared: false }),
+		clearTimeout: (id) => {
+			if (timers[id - 1]) {
+				timers[id - 1].cleared = true;
+			}
+		},
 		...(withStripe ? { Stripe: stripe.Stripe } : {}),
 	};
 
@@ -125,7 +137,12 @@ function load(stripe = fakeStripe(), { withStripe = true } = {}) {
 	vm.runInContext(SOURCE, vm.createContext(sandbox), { filename: 'island.js' });
 	assert.equal(registered.length, 1, 'The script registers one island.');
 
-	return { island: registered[0], head, sandbox, seen: stripe.seen };
+	return { island: registered[0], head, sandbox, seen: stripe.seen, timers };
+}
+
+// Lets the script's pending promises run.
+function settle() {
+	return new Promise((resolve) => setImmediate(resolve));
 }
 
 // A payment context, as the host gives one.
@@ -235,6 +252,38 @@ test('an Element that fails to load fails the mount, and is destroyed', async ()
 
 	await assert.rejects(island.mount(element('div'), context()), { name: 'StripeIslandError', code: 'element_failed' });
 	assert.equal(seen.destroyed, 1);
+});
+
+test('an Element whose frame never answers fails the mount after 30 seconds, and is destroyed', async () => {
+	const { island, seen, timers } = load(fakeStripe({ loads: 'never' }));
+	const mounting = island.mount(element('div'), context());
+	let failed = null;
+
+	mounting.catch((error) => {
+		failed = error;
+	});
+	await settle();
+	assert.deepEqual(
+		timers.map(({ ms, cleared }) => ({ ms, cleared })),
+		[{ ms: 30000, cleared: false }],
+		'The wait for the Element is limited.'
+	);
+	assert.equal(failed, null, 'Not before the limit.');
+
+	timers[0].run();
+	await assert.rejects(mounting, { name: 'StripeIslandError', code: 'element_timeout' });
+	assert.equal(seen.destroyed, 1);
+});
+
+test('an Element that becomes ready clears its time limit', async () => {
+	const { island, seen, timers } = load();
+
+	await island.mount(element('div'), context());
+	assert.deepEqual(
+		timers.map(({ ms, cleared }) => ({ ms, cleared })),
+		[{ ms: 30000, cleared: true }]
+	);
+	assert.equal(seen.destroyed, 0);
 });
 
 test('confirm() sends no payment data once Stripe accepts the fields, and refuses with the field error otherwise', async () => {
