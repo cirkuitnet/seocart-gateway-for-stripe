@@ -46,6 +46,10 @@
 	const SHOPPER_TYPES = [ 'card_error', 'validation_error' ];
 	const SHOPPER_CODES = [ 'payment_intent_authentication_failure' ];
 
+	// The statuses of a PaymentIntent whose confirmation went through: authorized, to be captured
+	// later, or paid.
+	const CONFIRMED = [ 'requires_capture', 'succeeded' ];
+
 	// The one load of Stripe.js on the page, and one Stripe object per publishable key.
 	let loading = null;
 	const clients = new Map();
@@ -286,7 +290,7 @@
 					throw islandError( 'step_not_taken' );
 				}
 
-				const { error } = await stripe.confirmPayment( {
+				const { error, paymentIntent } = await stripe.confirmPayment( {
 					elements,
 					clientSecret: next.client_token,
 					confirmParams: {
@@ -303,7 +307,13 @@
 				}
 
 				if ( ! error ) {
-					return 'completed';
+					// Completed only when the payment is authorized for capture, or paid. A PaymentIntent
+					// that still waits (for the shopper, a confirmation, its card or Stripe) is reported
+					// failed, never completed: the host resumes on either, and the store's answer from
+					// Stripe decides.
+					return CONFIRMED.includes( paymentIntent?.status )
+						? 'completed'
+						: 'failed';
 				}
 
 				declined = shopperMessage( error );

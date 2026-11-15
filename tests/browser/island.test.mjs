@@ -10,7 +10,8 @@
 // - in billingDetails(), an absent detail sent as empty text, which Stripe refuses on a retry
 //   (parameter_invalid_empty): the no-address test fails;
 // - in action(), the form's state not checked once Stripe answers: the step abandoned by unmount()
-//   reports Stripe's answer, and the abandoned-step test fails.
+//   reports Stripe's answer, and the abandoned-step test fails;
+// - in action(), every answer without an error taken as completed: the status table fails.
 
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -402,3 +403,22 @@ test('an action asked of a form already unmounted calls Stripe not at all, and r
 	assert.equal(seen.confirmations.length, 0);
 });
 
+test('a confirmation Stripe answers without an error is completed only when the payment awaits capture or succeeded', async () => {
+	const rows = [
+		['requires_capture', 'completed'],
+		['succeeded', 'completed'],
+		['requires_payment_method', 'failed'],
+		['canceled', 'failed'],
+		['requires_action', 'failed'],
+		['requires_confirmation', 'failed'],
+		['processing', 'failed'],
+		[undefined, 'failed'],
+	];
+
+	for (const [status, expected] of rows) {
+		const answer = status ? { paymentIntent: { status } } : {};
+		const handle = await load(fakeStripe({ confirm: answer })).island.mount(element('div'), context());
+
+		assert.equal(await handle.action(STEP, RESUME), expected, `A PaymentIntent ${status ?? 'not given'}.`);
+	}
+});

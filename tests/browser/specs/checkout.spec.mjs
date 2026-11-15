@@ -525,6 +525,13 @@ test.describe('The card form in the checkout, as a guest', () => {
 	});
 
 	test.afterEach(async ({ page }, testInfo) => {
+		const confirmations = (await stripeSeen(page).catch(() => null))?.confirmations ?? [];
+
+		// What each confirmation came to, as Stripe answered it: the PaymentIntent's status, or the
+		// error's type and code; never a message or a handle.
+		// eslint-disable-next-line no-console
+		console.log(`Stripe's confirmations: ${JSON.stringify(confirmations.map(({ error, status }) => (error ? `${error.type}/${error.code}` : status)))}`);
+
 		if (testInfo.status !== testInfo.expectedStatus) {
 			const state = await hostState(page).catch(() => null);
 			const seen = await stripeSeen(page).catch(() => null);
