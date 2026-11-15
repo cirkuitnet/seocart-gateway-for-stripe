@@ -625,6 +625,9 @@ test.describe('The card form in the checkout, as a guest', () => {
 		await typeCard(page, CARDS.declined);
 		await placeOrder(page);
 		await expectDeclineShown(page);
+		expect((await stripeSeen(page)).confirmations.map(({ error }) => error), 'Stripe declined the card at its confirmation.').toEqual([
+			{ type: 'card_error', code: 'card_declined' },
+		]);
 
 		await typeCard(page, CARDS.approved);
 		await placeOrder(page);
