@@ -268,11 +268,19 @@
 			 * Confirms the store's PaymentIntent with the card typed, a bank's check included.
 			 * Only Stripe's own step (`sdk`) is taken.
 			 *
+			 * A form unmounted before or while Stripe confirms no longer owns the step: the host
+			 * that unmounted it has moved on, so Stripe is not asked, or its answer is dropped, and
+			 * the action reports `left`, the step the host is to do nothing more for.
+			 *
 			 * @param {Object} next   The step: type, url, client_token.
 			 * @param {Object} resume The payment's uuid, the address to come back to, the billing address.
-			 * @return {Promise<string>} `completed`, or `failed` when Stripe refused the confirmation.
+			 * @return {Promise<string>} `completed`, `failed` when Stripe refused the confirmation, or `left`.
 			 */
 			async action( next, resume ) {
+				if ( ! live ) {
+					return 'left';
+				}
+
 				if ( 'sdk' !== next.type || ! next.client_token ) {
 					// Not Stripe's step for this form: the store's resume decides.
 					throw islandError( 'step_not_taken' );
@@ -289,6 +297,10 @@
 					},
 					redirect: 'if_required',
 				} );
+
+				if ( ! live ) {
+					return 'left';
+				}
 
 				if ( ! error ) {
 					return 'completed';

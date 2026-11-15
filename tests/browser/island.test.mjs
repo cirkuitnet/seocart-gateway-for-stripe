@@ -8,7 +8,9 @@
 // - in action(), a failed confirmation reported as completed: the decline's mapping fails;
 // - in unmount(), the Element not destroyed: the unmount test fails;
 // - in billingDetails(), an absent detail sent as empty text, which Stripe refuses on a retry
-//   (parameter_invalid_empty): the no-address test fails.
+//   (parameter_invalid_empty): the no-address test fails;
+// - in action(), the form's state not checked once Stripe answers: the step abandoned by unmount()
+//   reports Stripe's answer, and the abandoned-step test fails.
 
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -375,3 +377,28 @@ test('unmount() destroys the Element, empties the form, and a confirmation in fl
 	handle.showError({ code: 'declined', message: 'The payment was declined.' });
 	assert.equal(el.children.length, 0, 'An unmounted form shows nothing more.');
 });
+
+test('unmount() while a confirmation is with Stripe abandons the step: whatever Stripe answers, the action reports left', async () => {
+	for (const answer of [{ paymentIntent: { status: 'requires_capture' } }, { error: { type: 'card_error', code: 'card_declined', message: 'Your card was declined.' } }]) {
+		let release;
+		const pending = new Promise((resolve) => {
+			release = resolve;
+		});
+		const handle = await load(fakeStripe({ confirm: pending })).island.mount(element('div'), context());
+		const acting = handle.action(STEP, RESUME);
+
+		handle.unmount();
+		release(answer);
+		assert.equal(await acting, 'left', `Stripe answered ${answer.error ? 'an error' : 'an approval'} after the form was gone.`);
+	}
+});
+
+test('an action asked of a form already unmounted calls Stripe not at all, and reports left', async () => {
+	const { island, seen } = load();
+	const handle = await island.mount(element('div'), context());
+
+	handle.unmount();
+	assert.equal(await handle.action(STEP, RESUME), 'left');
+	assert.equal(seen.confirmations.length, 0);
+});
+
