@@ -19,13 +19,14 @@
 #   soak-size       Refuses a soak-size input outside 7 to 60 (SOAK_SIZE).
 #   live <part>     Runs the live tests of a part, three-d-secure or webhooks: exactly the part's
 #                   tests must run, and each pass, none skipped.
-#   site            Installs the site the checkout's browser tests run against, in the runner's
-#                   temporary directory: SEOCart's scripts built, SEOCart and this plugin installed
-#                   from the zips built here, the gateway configured in test mode from the settings
-#                   file with its webhooks left out, the runner's own address trusted as a proxy,
-#                   and the site served by PHP's built-in server (WORDPRESS_VERSION and the
-#                   SEOCART_CI_DB_* variables, as SEOCart's extension workflow sets them). Its
-#                   administrator's password is made for the run and masked.
+#   site            Builds and installs the site the checkout's browser tests run against, in the
+#                   runner's temporary directory, before the settings file exists: SEOCart's scripts
+#                   built, SEOCart and this plugin installed from the zips built here, the runner's
+#                   own address trusted as a proxy, and the site served by PHP's built-in server
+#                   (WORDPRESS_VERSION and the SEOCART_CI_DB_* variables, as SEOCart's extension
+#                   workflow sets them). Its administrator's password is made for the run and masked.
+#   configure       Configures that site's gateway in test mode from the settings file, its webhooks
+#                   left out. Installs and builds nothing: the file holds the test account's key.
 #   checkout        Runs the checkout's browser tests (tests/browser/specs) against that site: each
 #                   must pass, none skipped. Whatever became of them, the PaymentIntents the site
 #                   created go on the run list.
@@ -221,7 +222,6 @@ site_wp() {
 }
 
 site() {
-	[ -f "$settings" ] || fail 'The settings file is missing: run the settings step first.'
 	for name in WORDPRESS_VERSION SEOCART_CI_DB_HOST SEOCART_CI_DB_USER SEOCART_CI_DB_PASSWORD SEOCART_CI_DB_NAME; do
 		eval "is_set=\${$name+set}"
 		[ "${is_set:-}" = set ] || fail "site: the environment variable $name is not set."
@@ -252,7 +252,6 @@ site() {
 	for zip in "$core"/dist/seocart-*.zip "$ext"/dist/seocart-gateway-for-stripe-*.zip; do
 		site_wp plugin install "$zip" --activate </dev/null
 	done
-	site_wp seocart gateway configure stripe --mode=test --from-file="$settings" --no-webhooks --user=admin </dev/null
 
 	# Opcache off, for the reason SEOCart's install smoke test gives.
 	php -d opcache.enable=0 -d opcache.enable_cli=0 -S "${site_url#http://}" -t "$site_dir" >"$work/server.log" 2>&1 &
@@ -266,7 +265,16 @@ site() {
 
 	printf 'WP_BASE_URL=%s\nWP_USERNAME=admin\nWP_PASSWORD=%s\n' "$site_url" "$password" >"$site_env"
 	chmod 600 "$site_env"
-	echo "The site answers at $site_url, SEOCart and the adapter active, the gateway in test mode."
+	echo "The site answers at $site_url, SEOCart and the adapter active."
+}
+
+# Configures the site's gateway from the settings file, once it is written; nothing is installed or
+# built from then on.
+configure() {
+	[ -f "$settings" ] || fail 'The settings file is missing: run the settings step first.'
+	[ -f "$site_env" ] || fail 'The site is missing: run the site step first.'
+	site_wp seocart gateway configure stripe --mode=test --from-file="$settings" --no-webhooks --user=admin </dev/null
+	echo 'The gateway takes payments in test mode, its webhooks left out.'
 }
 
 # Adds the site's Stripe PaymentIntents to the run list, each as Stripe's id and the store's uuid.
@@ -335,8 +343,9 @@ case ${1:-} in
 	soak-size) soak_size ;;
 	live) live "${2:-}" ;;
 	site) site ;;
+	configure) configure ;;
 	checkout) checkout ;;
 	cleanup) cleanup "${2:-}" ;;
 	verdict) verdict ;;
-	*) fail 'usage: stripe-test-mode.sh check-secrets|settings|heads|conformance|soak-size|live <part>|site|checkout|cleanup [endpoints]|verdict' ;;
+	*) fail 'usage: stripe-test-mode.sh check-secrets|settings|heads|conformance|soak-size|live <part>|site|configure|checkout|cleanup [endpoints]|verdict' ;;
 esac
