@@ -25,6 +25,9 @@ export default defineConfig({
 	outputDir: 'test-results',
 	use: {
 		baseURL: process.env.WP_BASE_URL,
+		// An action on a page, such as typing into a field that never comes, fails in half a minute
+		// rather than at the test's own limit.
+		actionTimeout: 30_000,
 		trace: 'off',
 		video: 'off',
 		screenshot: 'off',

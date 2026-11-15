@@ -203,12 +203,13 @@ async function readyCart(api, variantId) {
 }
 
 // Watches Stripe.js on every page the test loads, on `window.__stripeSeen`: each Elements group
-// the page makes, with its amount; each Element made and destroyed; and what each confirmation came
-// to, by the error's type and code alone. Stripe's objects take no new members, so the `Stripe`
-// function Stripe.js gives the page, and what it makes, are handed out behind proxies that call the
-// objects themselves; a confirmation is given the Elements group itself.
+// the page makes, with its amount; each Element made and destroyed, how long it took to be ready,
+// and whether its fields are complete, as its own `change` event says, never by reading a field;
+// and what each confirmation came to, by the error's type and code alone. Stripe's objects take no
+// new members, so the `Stripe` function Stripe.js gives the page, and what it makes, are handed out
+// behind proxies that call the objects themselves; a confirmation is given the Elements group itself.
 function watchStripe() {
-	const seen = (window.__stripeSeen = { watched: false, elements: [], created: 0, destroyed: 0, confirmations: [] });
+	const seen = (window.__stripeSeen = { watched: false, elements: [], created: 0, destroyed: 0, readyMs: [], complete: null, confirmations: [] });
 	const objects = new WeakMap();
 	const watched = (object, members) => {
 		const proxy = new Proxy(object, {
@@ -252,8 +253,14 @@ function watchStripe() {
 										return watched(group, {
 											create(...created) {
 												const element = group.create(...created);
+												const madeAt = performance.now();
 
 												seen.created++;
+												seen.complete = null;
+												element.on('ready', () => seen.readyMs.push(Math.round(performance.now() - madeAt)));
+												element.on('change', (event) => {
+													seen.complete = Boolean(event?.complete);
+												});
 
 												return watched(element, {
 													destroy(...destroyed) {
@@ -329,15 +336,39 @@ function cardFrame(page) {
 	return page.locator('.seocart-island[data-gateway="stripe"] iframe').first().contentFrame();
 }
 
-// Types a card into the Payment Element: its number, an expiry and a CVC, and nothing else, as the
-// form asks for nothing else.
-async function typeCard(page, number) {
-	const frame = cardFrame(page);
+// Tells whether the Element says, by its latest `change` event, that its fields are complete;
+// waits a few seconds for it.
+async function formComplete(page) {
+	try {
+		await expect.poll(async () => (await stripeSeen(page)).complete, { timeout: 5_000 }).toBe(true);
+		return true;
+	} catch {
+		return false;
+	}
+}
 
-	await frame.locator('input[name="number"]').fill(number);
-	await frame.locator('input[name="expiry"]').fill('12 / 34');
-	await frame.locator('input[name="cvc"]').fill('123');
-	await expect(frame.locator('input[name="postalCode"], select[name="country"]'), 'The form asks for no billing details.').toHaveCount(0);
+// Types a card into the Payment Element: its number, an expiry and a CVC, and nothing else, as the
+// form asks for nothing else; then waits for the Element to say its fields are complete, types the
+// card once more when it does not, and fails at once, naming it, when it still does not.
+async function typeCard(page, number) {
+	for (let attempt = 1; attempt <= 2; attempt++) {
+		const frame = cardFrame(page);
+
+		// The Element tells of a change only when its state changes, and it may hold an earlier
+		// attempt's complete card: the number is cleared first, so a complete form is this card's.
+		await frame.locator('input[name="number"]').fill('');
+		await expect.poll(async () => (await stripeSeen(page)).complete, { timeout: 5_000, message: 'The cleared form is not complete.' }).not.toBe(true);
+		await frame.locator('input[name="number"]').fill(number);
+		await frame.locator('input[name="expiry"]').fill('12 / 34');
+		await frame.locator('input[name="cvc"]').fill('123');
+		await expect(frame.locator('input[name="postalCode"], select[name="country"]'), 'The form asks for no billing details.').toHaveCount(0);
+
+		if (await formComplete(page)) {
+			return;
+		}
+	}
+
+	throw new Error('card not typed: Stripe\'s form did not say its fields were complete after the card was typed twice.');
 }
 
 // Presses the page's Place button.
@@ -525,12 +556,14 @@ test.describe('The card form in the checkout, as a guest', () => {
 	});
 
 	test.afterEach(async ({ page }, testInfo) => {
-		const confirmations = (await stripeSeen(page).catch(() => null))?.confirmations ?? [];
+		const { confirmations = [], readyMs = [] } = (await stripeSeen(page).catch(() => null)) ?? {};
 
 		// What each confirmation came to, as Stripe answered it: the PaymentIntent's status, or the
-		// error's type and code; never a message or a handle.
+		// error's type and code, never a message or a handle; and how long each form took to be ready.
 		// eslint-disable-next-line no-console
-		console.log(`Stripe's confirmations: ${JSON.stringify(confirmations.map(({ error, status }) => (error ? `${error.type}/${error.code}` : status)))}`);
+		console.log(
+			`Stripe's confirmations: ${JSON.stringify(confirmations.map(({ error, status }) => (error ? `${error.type}/${error.code}` : status)))}; the form ready in ${JSON.stringify(readyMs)} ms`
+		);
 
 		if (testInfo.status !== testInfo.expectedStatus) {
 			const state = await hostState(page).catch(() => null);
@@ -564,11 +597,14 @@ test.describe('The card form in the checkout, as a guest', () => {
 
 		await expect(page.locator('.seocart-island[data-gateway="stripe"] iframe').first()).toBeVisible();
 		expect(stripeJs()).toBeGreaterThan(0);
+		// As soon as the form is shown: an island that writes to the store fails here, on the ledger.
+		await expectOnlyHostWrites(page, ledger);
 		await typeCard(page, CARDS.approved);
 
 		const { totals } = await readCart(page.request);
+		const { watched, elements, created, destroyed, confirmations } = await stripeSeen(page);
 
-		expect(await stripeSeen(page)).toEqual({
+		expect({ watched, elements, created, destroyed, confirmations }).toEqual({
 			watched: true,
 			elements: [{ mode: 'payment', amount: totals.summary.grand_minor, currency: totals.currency.toLowerCase(), captureMethod: 'manual' }],
 			created: 1,
