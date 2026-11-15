@@ -640,10 +640,17 @@ test.describe('The card form in the checkout, as a guest', () => {
 		await readyCart(page.request, product.variantId);
 		await openCheckout(page, pluginBasePath, [stripeMethod()]);
 		await typeCard(page, CARDS.approved);
+		// The fixture's Place button calls the host on every click, and stays enabled: both clicks
+		// reach it, which the page counts.
+		await page.evaluate(() => {
+			window.__placeClicks = 0;
+			document.getElementById('seocart-place').addEventListener('click', () => window.__placeClicks++);
+		});
 		await page.locator('#seocart-place').dblclick();
 
 		const placed = await awaitPlaced(page);
 
+		expect(await page.evaluate(() => window.__placeClicks), 'Both clicks reached Place.').toBe(2);
 		await expectApproved(page, placed);
 		expect(hostWrites(ledger).map(({ route }) => route)).toEqual([`${STORE}/checkout`, `${STORE}/checkout/resume`]);
 		await expectContractKept(page, ledger, [placed.orderKey]);
