@@ -49,7 +49,7 @@ final class CleanupSelection {
 	 *
 	 * @var string
 	 */
-	private const INTENT_ID = 'pi_[A-Za-z0-9]{1,64}';
+	public const INTENT_ID = 'pi_[A-Za-z0-9]{1,64}';
 
 	/**
 	 * The shape of the store's uuid of an intent, as a regular expression's part.

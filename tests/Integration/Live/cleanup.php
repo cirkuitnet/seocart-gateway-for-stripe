@@ -24,7 +24,6 @@ use SEOCart\GatewayForStripe\Tests\Integration\Live\StripeTestApi;
 use SEOCart\GatewayForStripe\Tests\Support\Live\CleanupSelection;
 use SEOCart\GatewayForStripe\Tests\Support\Live\StripeRun;
 use SEOCart\GatewayForStripe\WebhookEndpoints;
-use SEOCart\Tests\Conformance\Payment\Live\LiveRun;
 
 if ( 'cli' !== PHP_SAPI ) {
 	exit( 1 );
@@ -39,7 +38,7 @@ if ( ! in_array( $argv[3] ?? '', array( '', 'endpoints' ), true ) ) {
 }
 
 $seocart_gateway_for_stripe_settings  = (array) json_decode( is_readable( $argv[1] ?? '' ) ? (string) file_get_contents( $argv[1] ) : '', true );
-$seocart_gateway_for_stripe_run_list  = LiveRun::runList( is_readable( $argv[2] ?? '' ) ? (string) file_get_contents( $argv[2] ) : '' );
+$seocart_gateway_for_stripe_run_list  = StripeRun::paymentIntents( is_readable( $argv[2] ?? '' ) ? (string) file_get_contents( $argv[2] ) : '' );
 $seocart_gateway_for_stripe_endpoints = 'endpoints' === ( $argv[3] ?? '' );
 
 if ( ! is_string( $seocart_gateway_for_stripe_settings['secret_key'] ?? null ) ) {

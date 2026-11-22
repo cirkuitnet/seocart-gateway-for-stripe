@@ -12,6 +12,7 @@ declare( strict_types=1 );
 namespace SEOCart\GatewayForStripe\Tests\Support\Live;
 
 use SEOCart\Tests\Conformance\Payment\Live\LiveDeclaration;
+use SEOCart\Tests\Conformance\Payment\Live\LiveRun;
 use SEOCart\Tests\Conformance\Payment\Live\MessageGuard;
 
 /**
@@ -84,6 +85,25 @@ final class StripeRun {
 			( (int) hexdec( substr( $hash, 12, 4 ) ) & 0x0fff ) | 0x5000,
 			( (int) hexdec( substr( $hash, 16, 4 ) ) & 0x3fff ) | 0x8000,
 			substr( $hash, 20, 12 )
+		);
+	}
+
+	/**
+	 * Reads a run list as PaymentIntents: the store uuid of each, by Stripe's PaymentIntent id.
+	 *
+	 * SEOCart's run list takes any provider's id, and the cleanup asks Stripe for each id it reads as
+	 * a PaymentIntent, so a line of any other shape is left out, as Stripe would answer it 404.
+	 *
+	 * @since 0.2.0
+	 *
+	 * @param string $text The run list's text.
+	 * @return array<string, string> The uuids, by PaymentIntent id; a line of any other shape is left out.
+	 */
+	public static function paymentIntents( string $text ): array {
+		return array_filter(
+			LiveRun::runList( $text ),
+			static fn( int|string $id ): bool => 1 === preg_match( '/^' . CleanupSelection::INTENT_ID . '$/D', (string) $id ),
+			ARRAY_FILTER_USE_KEY
 		);
 	}
 

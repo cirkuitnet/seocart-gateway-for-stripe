@@ -13,9 +13,10 @@ namespace SEOCart\GatewayForStripe\Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
 use SEOCart\GatewayForStripe\Tests\Support\Live\StripeRun;
+use SEOCart\Tests\Conformance\Payment\Live\LiveRun;
 
 /**
- * The guard built from tests/live.php refuses an argument shaped like one of Stripe's keys, a signing secret, a client secret or a receipt's address, and blanks each out of a text, while Stripe's ids pass; and the run's installation is the same version-5 uuid on every run, made from the address of the repository the declaration derives.
+ * The guard built from tests/live.php refuses an argument shaped like one of Stripe's keys, a signing secret, a client secret or a receipt's address, and blanks each out of a text, while Stripe's ids pass; the run's installation is the same version-5 uuid on every run, made from the address of the repository the declaration derives; and the cleanup reads the run list as PaymentIntents alone.
  *
  * Every canary is built when the test runs, so no key-shaped text is kept in the repository.
  * SEOCart's own tests hold the shapes every extension shares: an address with a query, an
@@ -97,5 +98,19 @@ final class LiveDeclarationTest extends TestCase {
 	 */
 	public function test_the_installation_is_the_version_5_uuid_of_the_repository(): void {
 		$this->assertSame( 'a8c53d85-ff8c-52ea-9f2c-67efde16e51b', StripeRun::installUuid() );
+	}
+
+	/**
+	 * Tests that the cleanup reads the run list as PaymentIntents: a line of another prefix, or with a `pi_` id holding a character no PaymentIntent's id has, is left out, though SEOCart's run list takes both.
+	 *
+	 * Planted violation, shown red and removed: the shape's check dropped from StripeRun::paymentIntents().
+	 *
+	 * @since 0.2.0
+	 */
+	public function test_the_run_list_is_read_as_payment_intents_alone(): void {
+		$text = "pi_3Abc 00000000-0000-5000-8000-000000000001\nwe_3Abc 00000000-0000-5000-8000-000000000002\npi_3A-bc 00000000-0000-5000-8000-000000000003\n";
+
+		$this->assertCount( 3, LiveRun::runList( $text ) );
+		$this->assertSame( array( 'pi_3Abc' => '00000000-0000-5000-8000-000000000001' ), StripeRun::paymentIntents( $text ) );
 	}
 }
