@@ -170,9 +170,9 @@ jobs:
                   STRIPE_TEST_RESTRICTED_KEY: ${{ secrets.STRIPE_TEST_RESTRICTED_KEY }}
                   STRIPE_TEST_PUBLISHABLE_KEY: ${{ secrets.STRIPE_TEST_PUBLISHABLE_KEY }}
 
-            # The suite as the replay runs it, every request sent to Stripe: the replay's 17 tests
-            # with its two skips, rules 9 and 17, and no other. The PaymentIntents it creates are
-            # read from the tapes it records onto the run list, which the cleanup works from.
+            # The suite as the replay runs it, every request sent to Stripe: the tests and the skips
+            # tests/live.php states, and no other. The PaymentIntents it creates are read from the
+            # tapes it records onto the run list, which the cleanup works from.
             - name: Run the conformance suite against Stripe's test mode
               id: run
               run: sh seocart/bin/ci/extension-live.sh conformance ext
