@@ -38,6 +38,12 @@ set -eu
 
 ext=$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)
 core=$(CDPATH='' cd -- "$ext/../seocart" 2>/dev/null && pwd) || core=$ext/../seocart
+# The clean-up runs whatever became of the job's steps. Without SEOCart's lib, SEOCart was never
+# checked out, and the settings step, which always comes after that checkout, never ran.
+if [ "${1:-}" = cleanup ] && [ ! -f "$core/bin/ci/extension-live-lib.sh" ]; then
+	echo 'cleanup: SEOCart was not checked out, so no settings file was written and nothing was sent to Stripe.'
+	exit 0
+fi
 # shellcheck source=/dev/null
 [ "${1:-}" = check-secrets ] || . "$core/bin/ci/extension-live-lib.sh"
 

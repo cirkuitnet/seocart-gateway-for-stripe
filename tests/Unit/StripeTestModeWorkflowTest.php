@@ -18,7 +18,7 @@ use SEOCart\Tests\Conformance\Payment\Live\SettingsLast;
 use SEOCart\Tests\Conformance\Payment\Live\WorkflowFacts;
 
 /**
- * The Stripe test mode workflow keeps every fact SEOCart's WorkflowFacts reads with the plugin's declaration (tests/live.php): it starts only on its schedule or by hand, has no job named ci, reads the repository and nothing more, runs each job only in this repository, gives a secret only to the env of a step that needs it, never traces the shell, prints the environment or uploads a file, runs one at a time uncancelled, limits every job's time, has as its jobs and as the choices of its parts input the parts the declaration states, and checks SEOCart out before its verdict. Each job writes its settings file, which holds the key, after everything that installs or builds, and runs nothing after it but the steps SettingsLast's closed lists allow: SEOCart's suite and live steps, and Stripe's configure, checkout and cleanup. The soak-size step gives the size the soak takes to the job's later steps. No class of SEOCart's live workflow is left copied in the plugin's tests.
+ * The Stripe test mode workflow keeps every fact SEOCart's WorkflowFacts reads with the plugin's declaration (tests/live.php): it starts only on its schedule or by hand, has no job named ci, reads the repository and nothing more, runs each job only in this repository, gives a secret only to the env of a step that needs it, never traces the shell, prints the environment or uploads a file, runs one at a time uncancelled, limits every job's time, has as its jobs and as the choices of its parts input the parts the declaration states, and checks SEOCart out before its verdict. Each job writes its settings file, which holds the key, after everything that installs or builds, and runs nothing after it but the steps SettingsLast's closed lists allow: SEOCart's suite and live steps, and Stripe's configure, checkout and cleanup. The soak-size step gives the size the soak takes to the job's later steps. The clean-up passes, saying why, when SEOCart was never checked out. No class of SEOCart's live workflow is left copied in the plugin's tests.
  *
  * Pins, the PHP set-up, Composer, the Node.js version and the reference to SEOCart's action are
  * SEOCart's check of workflows' (`sh ../seocart/bin/ci/check-workflows.sh .`), which the required
@@ -31,6 +31,7 @@ use SEOCart\Tests\Conformance\Payment\Live\WorkflowFacts;
  * - `npx playwright test` put back in the script's checkout(), in the file: the closed list fails
  *   naming the command;
  * - the soak-size step's check of the size removed: 99 is written to the job's environment;
+ * - the script's clean-up without SEOCart's lib no longer told apart: the clean-up fails there;
  * - tests/Support/Live/Verdict.php restored: the copies' test fails naming it.
  *
  * @since 0.2.0
@@ -180,6 +181,34 @@ final class StripeTestModeWorkflowTest extends TestCase {
 	}
 
 	/**
+	 * Tests that the clean-up, which runs whatever became of the job's steps, passes and says why when SEOCart was never checked out, and that every other step still fails there.
+	 *
+	 * The script runs from a folder of the test's own, as ext/bin/ci/stripe-test-mode.sh with no
+	 * seocart/ beside it, as when the secrets' check, the choice of SEOCart's commit or its checkout
+	 * failed: the settings step comes after that checkout, so nothing was sent to Stripe.
+	 *
+	 * @since 0.2.0
+	 */
+	public function test_the_cleanup_passes_without_seocart_and_every_other_step_fails(): void {
+		$root = sys_get_temp_dir() . '/stripe-test-mode-no-seocart-' . bin2hex( random_bytes( 8 ) );
+		$said = 'cleanup: SEOCart was not checked out, so no settings file was written and nothing was sent to Stripe.';
+
+		try {
+			mkdir( $root . '/ext/bin/ci', 0700, true );
+			mkdir( $root . '/temp', 0700 );
+			copy( dirname( __DIR__, 2 ) . '/' . self::declaration()->script(), $root . '/ext/' . self::declaration()->script() );
+
+			foreach ( array( 'cleanup', 'cleanup endpoints', 'settings', 'soak-size', 'configure', 'checkout' ) as $step ) {
+				list( $status, $printed ) = self::step( $root, $step );
+
+				$this->assertSame( array( str_starts_with( $step, 'cleanup' ), str_starts_with( $step, 'cleanup' ) ), array( 0 === $status, str_contains( $printed, $said ) ), $step . ': ' . $printed );
+			}
+		} finally {
+			self::remove( $root );
+		}
+	}
+
+	/**
 	 * Tests that no file of the plugin's tests declares a class of SEOCart's live workflow: a copy left behind would drift from SEOCart's.
 	 *
 	 * @since 0.2.0
@@ -263,6 +292,43 @@ final class StripeTestModeWorkflowTest extends TestCase {
 		exec( 'GITHUB_ENV=' . escapeshellarg( $file ) . ' ' . escapeshellarg( PHP_BINARY ) . ' ' . escapeshellarg( dirname( __DIR__ ) . '/Integration/Live/soak-size.php' ) . ' ' . escapeshellarg( $size ) . ' 2>&1', $output, $status );
 
 		return array( $status, $output );
+	}
+
+	/**
+	 * Runs one step of the script copied into a folder of the test's own, its temporary directory in that folder.
+	 *
+	 * @since 0.2.0
+	 *
+	 * @param string $root The folder, holding the script as ext/bin/ci/stripe-test-mode.sh.
+	 * @param string $step The step and its argument.
+	 * @return array{int, string} Its exit status and what it printed.
+	 */
+	private static function step( string $root, string $step ): array {
+		$output = array();
+
+		// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.system_calls_exec -- the script's own step, in a folder of the test's own.
+		exec( sprintf( 'env RUNNER_TEMP=%1$s sh %2$s %3$s 2>&1', escapeshellarg( $root . '/temp' ), escapeshellarg( $root . '/ext/' . self::declaration()->script() ), implode( ' ', array_map( 'escapeshellarg', explode( ' ', $step ) ) ) ), $output, $status );
+
+		return array( $status, implode( "\n", $output ) );
+	}
+
+	/**
+	 * Removes a file or a folder of the test's own, and everything in it.
+	 *
+	 * @since 0.2.0
+	 *
+	 * @param string $path The file or folder.
+	 */
+	private static function remove( string $path ): void {
+		if ( is_dir( $path ) && ! is_link( $path ) ) {
+			foreach ( array_diff( (array) scandir( $path ), array( '.', '..' ) ) as $name ) {
+				self::remove( $path . '/' . $name );
+			}
+
+			rmdir( $path );
+		} elseif ( file_exists( $path ) || is_link( $path ) ) {
+			unlink( $path );
+		}
 	}
 
 	/**
