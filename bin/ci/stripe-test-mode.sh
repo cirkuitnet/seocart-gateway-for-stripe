@@ -1,32 +1,24 @@
 #!/bin/sh
+# shellcheck disable=SC2154 # The paths and helpers of SEOCart's lib are assigned there.
 #
-# The steps of the Stripe test mode workflow (.github/workflows/stripe-test-mode.yml), run from
-# the directory that holds the extension's checkout and SEOCart's beside it, as ext/ and
-# seocart/ are on the runner:
+# Stripe's steps of the Stripe test mode workflow (.github/workflows/stripe-test-mode.yml), run from
+# the directory that holds the extension's checkout and SEOCart's beside it, as ext/ and seocart/
+# are on the runner:
 #
 #   sh ext/bin/ci/stripe-test-mode.sh <step> [argument]
 #
 #   check-secrets   Fails, naming the secret and never its value, when STRIPE_TEST_RESTRICTED_KEY
-#                   or STRIPE_TEST_PUBLISHABLE_KEY is empty or not a test mode's key.
+#                   or STRIPE_TEST_PUBLISHABLE_KEY is empty or not a test mode's key. It runs
+#                   before SEOCart is checked out, so it alone does without SEOCart's lib.
 #   settings        Writes the one file of test credentials the tests read, readable by its owner
-#                   alone, in the runner's temporary directory: the two keys, the account's
-#                   country and a signing secret made for the run and masked. Also starts the run
-#                   list and the report the live tests write to.
-#   heads           Gives the commits of the extension and of SEOCart as the job's outputs.
-#   conformance     Runs SEOCart's conformance suite with every request sent to Stripe's test
-#                   mode, adds the PaymentIntents it created to the run list from the tapes it
-#                   recorded, and checks it ran the replay's tests with the replay's two skips.
-#   soak-size       Refuses a soak-size input outside 7 to 60 (SOAK_SIZE).
-#   live <part>     Runs the live tests of a part, three-d-secure or webhooks: exactly the part's
-#                   tests must run, and each pass, none skipped.
-#   site            Builds and installs the site the checkout's browser tests run against, in the
-#                   runner's temporary directory, before the settings file exists: SEOCart's scripts
-#                   built, SEOCart and this plugin installed from the zips built here, the runner's
-#                   own address trusted as a proxy, and the site served by PHP's built-in server
-#                   (WORDPRESS_VERSION and the SEOCART_CI_DB_* variables, as SEOCart's extension
-#                   workflow sets them). Its administrator's password is made for the run and masked.
-#   configure       Configures that site's gateway in test mode from the settings file, its webhooks
-#                   left out. Installs and builds nothing: the file holds the test account's key.
+#                   alone, in the work directory: the two keys, the account's country and a signing
+#                   secret made for the run and masked. Also starts the run list and the report the
+#                   live tests write to.
+#   soak-size       Refuses a soak-size input outside 7 to 60 (SOAK_SIZE), and gives the size to the
+#                   job's later steps as SEOCART_SOAK_SIZE.
+#   configure       Configures the checkout's site's gateway in test mode from the settings file, its
+#                   webhooks left out. Installs and builds nothing: the file holds the test account's
+#                   key.
 #   checkout        Runs the checkout's browser tests (tests/browser/specs) against that site: each
 #                   must pass, none skipped. Whatever became of them, the PaymentIntents the site
 #                   created go on the run list.
@@ -35,44 +27,19 @@
 #                   webhook endpoint of the run's installation, which only the webhooks job sets
 #                   up; then stops the site's server, and removes the settings file, the run list,
 #                   the report and the site.
-#   verdict         Says, for each thing the run proves, which job proves it and how it went
-#                   (STRIPE_TEST_MODE_NEEDS, STRIPE_TEST_MODE_PARTS), and fails a red run.
 #
-# Nothing here prints a key, a signing secret, a client secret, a password or an event's body:
-# PHPUnit's and Playwright's output is passed through the tests' own filter of credential-shaped
-# text, and the shell never traces its commands. Outside GitHub Actions (a dry run), RUNNER_TEMP,
-# GITHUB_OUTPUT and GITHUB_STEP_SUMMARY may be left unset.
+# Every other step is SEOCart's (seocart/bin/ci/extension-live.sh), and so are the helpers and
+# paths below that this script does not define (seocart/bin/ci/extension-live-lib.sh). Nothing here
+# prints a key, a signing secret, a client secret, a password or an event's body: Playwright's
+# output passes through the guard of the plugin's declaration (tests/live.php), and the shell never
+# traces its commands.
 
 set -eu
 
-fail() {
-	printf '::error::%s\n' "$*"
-	exit 1
-}
-
 ext=$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)
 core=$(CDPATH='' cd -- "$ext/../seocart" 2>/dev/null && pwd) || core=$ext/../seocart
-step_php=$ext/tests/Integration/Live/workflow-step.php
-work=${RUNNER_TEMP:-${TMPDIR:-/tmp}}/stripe-test-mode
-settings=$work/settings.json
-run_list=$work/run-list
-report=$work/report
-site_dir=$work/site
-site_env=$work/site.env
-site_url=http://127.0.0.1:${STRIPE_TEST_MODE_HTTP_PORT:-8890}
-outputs=${GITHUB_OUTPUT:-/dev/stdout}
-
-# Writes one output of the step.
-output() {
-	printf '%s=%s\n' "$1" "$2" >>"$outputs"
-}
-
-# Masks a value in the rest of the job's log; outside GitHub Actions there is no log to mask.
-mask() {
-	if [ "${GITHUB_ACTIONS:-}" = true ]; then
-		printf '::add-mask::%s\n' "$1"
-	fi
-}
+# shellcheck source=/dev/null
+[ "${1:-}" = check-secrets ] || . "$core/bin/ci/extension-live-lib.sh"
 
 # Fails unless a secret's value begins with a prefix: require_key <name> <value> <prefix>. The
 # message names the secret and the prefix, never the value. A function's arguments stay in this
@@ -97,11 +64,6 @@ check_secrets() {
 	require_key STRIPE_TEST_PUBLISHABLE_KEY "${STRIPE_TEST_PUBLISHABLE_KEY:-}" pk_test_ || status=1
 	[ "$status" -eq 0 ] || exit 1
 	echo 'Both secrets are set, each a test mode key.'
-}
-
-# A random value of 32 hexadecimal digits.
-random_hex() {
-	od -An -N16 -tx1 /dev/urandom | tr -d ' \n'
 }
 
 # The signing secret the store checks the deliveries of the run with: made for the run, never
@@ -129,143 +91,8 @@ write_settings() {
 	echo "The settings file is written, readable by its owner alone: secret_key, publishable_key, account_country, webhook_secret."
 }
 
-heads() {
-	output ext-head "$(git -C "$ext" rev-parse HEAD)"
-	output core-head "$(git -C "$core" rev-parse HEAD)"
-}
-
-# The run's nonce: fresh for every attempt, as Stripe answers a key it saw in the last day with
-# its first answer.
-nonce() {
-	if [ -n "${GITHUB_RUN_ID:-}" ]; then
-		printf 'r%s.%s' "$GITHUB_RUN_ID" "${GITHUB_RUN_ATTEMPT:-1}"
-	else
-		printf 'r%s.1' "$(date +%s)"
-	fi
-}
-
-# Runs a command with its output filtered and kept in a file, and returns the command's status:
-# the pipe's status would be the filter's.
-filtered() {
-	kept=$1
-	shift
-	status_file=$work/status
-	{
-		code=0
-		"$@" 2>&1 || code=$?
-		echo "$code" >"$status_file"
-	} | php "$step_php" redact | tee "$kept"
-	return "$(cat "$status_file")"
-}
-
-conformance() {
-	[ -f "$settings" ] || fail 'The settings file is missing: run the settings step first.'
-	run_nonce=$(nonce)
-	output nonce "$run_nonce"
-	status=0
-	# The suite rewrites the tape of each scenario it completes: those newer than this mark are the
-	# run's. A file's time is read in whole seconds, so the suite starts in the second after the
-	# mark's, and a tape from the mark's own second is an earlier recording's.
-	touch "$work/conformance.mark"
-	sleep 1
-	# env gives the suite its recording's environment: a mode, the run's nonce and the settings
-	# file's path, none of them a credential.
-	filtered "$work/conformance.out" env SEOCART_TAPE=record SEOCART_TAPE_NONCE="$run_nonce" SEOCART_TAPE_SETTINGS="$settings" \
-		sh "$core/bin/ci/extension.sh" conformance "$ext" payments || status=$?
-	# Whatever became of the suite, the PaymentIntents it created go on the run list, so the cleanup
-	# cancels those it left waiting.
-	php "$step_php" harvest "$ext/tests/tapes" "$work/conformance.mark" "$run_list" || status=1
-	php "$step_php" suite "$work/conformance.out" || status=1
-	return "$status"
-}
-
 soak_size() {
-	php "$step_php" soak-size "${SOAK_SIZE:-}"
-}
-
-live() {
-	# The live tests of each part, as a PHPUnit filter of their classes. How many tests each part
-	# must run is SuiteOutput::LIVE_TESTS: a test added to a class here is counted there.
-	case ${1:-} in
-		three-d-secure) filter='/Live\\(AbandonedWindow|ThreeDSecure)Test::/' ;;
-		webhooks) filter='/Live\\(EndpointProvisioning|PolledEvents|Soak)Test::/' ;;
-		*) fail "live: the part is three-d-secure or webhooks, not ${1:-nothing}." ;;
-	esac
-	[ -f "$settings" ] || fail 'The settings file is missing: run the settings step first.'
-	mkdir -p "$work/tmp"
-	run_nonce=$(nonce)
-	status=0
-	# As in the suite's step, env gives PHPUnit the run's environment: paths, a mode, the nonce and
-	# the soak's size, none of them a credential.
-	(
-		cd "$ext"
-		filtered "$work/live.out" env SEOCART_EXTENSION_PATH="$ext" SEOCART_TAPE=record SEOCART_TAPE_NONCE="$run_nonce" \
-			SEOCART_TAPE_SETTINGS="$settings" SEOCART_LIVE_RUN_LIST="$run_list" SEOCART_LIVE_REPORT="$report" \
-			SEOCART_SOAK_SIZE="${SOAK_SIZE:-}" TMPDIR="$work/tmp" \
-			php "$core/vendor/bin/phpunit" --configuration "$ext/phpunit.xml.dist" --testsuite integration \
-			--bootstrap "$core/tests/bootstrap-integration.php" --group stripe-live --filter "$filter" --fail-on-empty-test-suite --verbose
-	) || status=$?
-	php "$step_php" live "$1" "$work/live.out" "$report" || status=1
-	if [ -n "${GITHUB_STEP_SUMMARY:-}" ] && [ -s "$report" ]; then
-		{
-			printf '### Live tests: %s\n\n' "$1"
-			php "$step_php" redact <"$report" | sed 's/^/- /'
-		} >>"$GITHUB_STEP_SUMMARY"
-	fi
-	return "$status"
-}
-
-# Runs WP-CLI against the checkout's site. Standard input is closed so that no command waits for a
-# prompt, unless the caller gives one.
-site_wp() {
-	wp --path="$site_dir" "$@"
-}
-
-site() {
-	for name in WORDPRESS_VERSION SEOCART_CI_DB_HOST SEOCART_CI_DB_USER SEOCART_CI_DB_PASSWORD SEOCART_CI_DB_NAME; do
-		eval "is_set=\${$name+set}"
-		[ "${is_set:-}" = set ] || fail "site: the environment variable $name is not set."
-	done
-	umask 077
-
-	echo 'Building SEOCart'\''s scripts and the two zips.'
-	(cd "$core" && npm ci && npm run build)
-	php "$core/bin/build-zip.php"
-	php "$core/bin/build-zip.php" --plugin="$ext"
-
-	echo 'Installing WordPress.'
-	sh "$core/bin/ci/download-wordpress.sh" "$WORDPRESS_VERSION" "$site_dir"
-	# The passwords are read from standard input so that they never appear in the process table.
-	printf '%s\n' "$SEOCART_CI_DB_PASSWORD" | site_wp config create --dbname="$SEOCART_CI_DB_NAME" \
-		--dbuser="$SEOCART_CI_DB_USER" --dbhost="$SEOCART_CI_DB_HOST" --dbprefix=checkout_ --prompt=dbpass >/dev/null
-	site_wp config set WP_ENVIRONMENT_TYPE local </dev/null
-	site_wp config set DISABLE_WP_CRON true --raw </dev/null
-	# The tests reach the site from this runner, as a proxy would, and give each test an address of
-	# its own in X-Forwarded-For: the store allows one client five placements and resumes an hour.
-	site_wp config set SEOCART_TRUSTED_PROXIES '127.0.0.0/8, ::1' </dev/null
-	password=$(random_hex)
-	mask "$password"
-	printf '%s\n' "$password" | site_wp core install --url="$site_url" --title='SEOCart checkout' --admin_user=admin \
-		--admin_email=admin@example.org --skip-email --prompt=admin_password >/dev/null
-
-	echo 'Installing SEOCart and the adapter from their zips.'
-	for zip in "$core"/dist/seocart-*.zip "$ext"/dist/seocart-gateway-for-stripe-*.zip; do
-		site_wp plugin install "$zip" --activate </dev/null
-	done
-
-	# Opcache off, for the reason SEOCart's install smoke test gives.
-	php -d opcache.enable=0 -d opcache.enable_cli=0 -S "${site_url#http://}" -t "$site_dir" >"$work/server.log" 2>&1 &
-	echo "$!" >"$work/server.pid"
-	attempts=0
-	until curl -s -o /dev/null "$site_url/license.txt"; do
-		attempts=$((attempts + 1))
-		[ "$attempts" -lt 20 ] || fail 'PHP'\''s built-in server did not start.'
-		sleep 1
-	done
-
-	printf 'WP_BASE_URL=%s\nWP_USERNAME=admin\nWP_PASSWORD=%s\n' "$site_url" "$password" >"$site_env"
-	chmod 600 "$site_env"
-	echo "The site answers at $site_url, SEOCart and the adapter active."
+	php "$ext/tests/Integration/Live/soak-size.php" "${SOAK_SIZE:-}"
 }
 
 # Configures the site's gateway from the settings file, once it is written; nothing is installed or
@@ -290,7 +117,8 @@ checkout() {
 	[ -f "$site_env" ] || fail 'The site is missing: run the site step first.'
 	status=0
 	# The site's address and administrator, and the settings file's path, which the tests give PHP
-	# to read the publishable key from: none is an argument a process list would show.
+	# to read the publishable key from: none is an argument a process list would show. Playwright is
+	# run as the set-up installed it, never through npx, which would fetch a package it did not find.
 	(
 		cd "$ext/tests/browser"
 		set -a
@@ -299,11 +127,11 @@ checkout() {
 		set +a
 		SEOCART_TAPE_SETTINGS=$settings
 		export SEOCART_TAPE_SETTINGS
-		filtered "$work/checkout.out" npx playwright test --config playwright.config.mjs --forbid-only
+		filtered "$work/checkout.out" node_modules/.bin/playwright test --config playwright.config.mjs --forbid-only
 	) || status=$?
 	harvest_site || status=1
-	passed=$(sed -n 's/^ *\([0-9][0-9]*\) passed.*/\1/p' "$work/checkout.out" | tail -n 1)
-	skipped=$(sed -n 's/^ *\([0-9][0-9]*\) skipped.*/\1/p' "$work/checkout.out" | tail -n 1)
+	passed=$(count "$work/checkout.out" passed)
+	skipped=$(count "$work/checkout.out" skipped)
 	output tests "${passed:-0}"
 	output skipped "${skipped:-0}"
 	if [ "${passed:-0}" -eq 0 ] || [ "${skipped:-0}" -ne 0 ]; then
@@ -331,21 +159,12 @@ cleanup() {
 	return "$status"
 }
 
-verdict() {
-	php "$step_php" verdict
-}
-
 case ${1:-} in
 	check-secrets) check_secrets ;;
 	settings) write_settings ;;
-	heads) heads ;;
-	conformance) conformance ;;
 	soak-size) soak_size ;;
-	live) live "${2:-}" ;;
-	site) site ;;
 	configure) configure ;;
 	checkout) checkout ;;
 	cleanup) cleanup "${2:-}" ;;
-	verdict) verdict ;;
-	*) fail 'usage: stripe-test-mode.sh check-secrets|settings|heads|conformance|soak-size|live <part>|site|configure|checkout|cleanup [endpoints]|verdict' ;;
+	*) fail 'usage: stripe-test-mode.sh check-secrets|settings|soak-size|configure|checkout|cleanup [endpoints]' ;;
 esac
