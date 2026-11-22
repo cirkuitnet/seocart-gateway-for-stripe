@@ -45,13 +45,13 @@ final class StripeRun {
 	public const SOAK_SEED = 'SEOCART_SOAK_SEED';
 
 	/**
-	 * The repository whose name the run's installation uuid is made from.
+	 * Where GitHub's addresses of repositories begin: the repository's `owner/name` follows.
 	 *
 	 * @since 0.2.0
 	 *
 	 * @var string
 	 */
-	public const REPOSITORY_URL = 'https://github.com/cirkuitnet/seocart-gateway-for-stripe';
+	private const GITHUB = 'https://github.com/';
 
 	/**
 	 * RFC 9562's namespace of URLs, in which the installation uuid is a name.
@@ -63,7 +63,7 @@ final class StripeRun {
 	private const URL_NAMESPACE = '6ba7b811-9dad-11d1-80b4-00c04fd430c8';
 
 	/**
-	 * Returns the uuid every run's site has as its installation: the version-5 uuid of the repository's address.
+	 * Returns the uuid every run's site has as its installation: the version-5 uuid of the repository's address on GitHub, the repository the declaration derives from composer.json.
 	 *
 	 * Every run provisions its webhook endpoint as this one installation, so the endpoint a run that
 	 * crashed left behind is found as this installation's: the next run's provisioning replaces it,
@@ -75,7 +75,7 @@ final class StripeRun {
 	 * @return string The uuid.
 	 */
 	public static function installUuid(): string {
-		$hash = sha1( (string) hex2bin( str_replace( '-', '', self::URL_NAMESPACE ) ) . self::REPOSITORY_URL );
+		$hash = sha1( (string) hex2bin( str_replace( '-', '', self::URL_NAMESPACE ) ) . self::GITHUB . self::declaration()->repository() );
 
 		return sprintf(
 			'%s-%s-%04x-%04x-%s',
