@@ -15,7 +15,7 @@ use PHPUnit\Framework\TestCase;
 use SEOCart\GatewayForStripe\Tests\Support\Live\StripeRun;
 
 /**
- * The guard built from tests/live.php refuses an argument shaped like one of Stripe's keys, a signing secret, a client secret or a receipt's address, and blanks each out of a text, while Stripe's ids pass; and the run's installation is the version-5 uuid of the repository's address, the same on every run, that repository being the one the declaration derives.
+ * The guard built from tests/live.php refuses an argument shaped like one of Stripe's keys, a signing secret, a client secret or a receipt's address, and blanks each out of a text, while Stripe's ids pass; and the run's installation is the same version-5 uuid on every run, made from the address of the repository the declaration derives.
  *
  * Every canary is built when the test runs, so no key-shaped text is kept in the repository.
  * SEOCart's own tests hold the shapes every extension shares: an address with a query, an
@@ -86,17 +86,16 @@ final class LiveDeclarationTest extends TestCase {
 	}
 
 	/**
-	 * Tests the installation uuid: RFC 9562's version-5 uuid of the repository's address in the URL namespace, its version and variant bits set, the repository being the one the declaration derives.
+	 * Tests the installation uuid, whole: RFC 9562's version-5 uuid of https://github.com/cirkuitnet/seocart-gateway-for-stripe in the URL namespace, the address made from the repository the declaration derives.
+	 *
+	 * The webhook endpoint every run sets up at Stripe is found by this uuid, so it never changes:
+	 * the literal is the uuid the runs have used since the live workflow began.
+	 *
+	 * Planted violation, shown red and removed: one offset of installUuid()'s substr() calls changed.
 	 *
 	 * @since 0.2.0
 	 */
 	public function test_the_installation_is_the_version_5_uuid_of_the_repository(): void {
-		$uuid = StripeRun::installUuid();
-
-		$this->assertMatchesRegularExpression( '/^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/D', $uuid );
-		$this->assertSame( $uuid, StripeRun::installUuid() );
-		// The first 32 bits are those of SHA-1 over the namespace's 16 bytes and the name.
-		$this->assertSame( substr( sha1( (string) hex2bin( '6ba7b8119dad11d180b400c04fd430c8' ) . StripeRun::REPOSITORY_URL ), 0, 8 ), substr( $uuid, 0, 8 ) );
-		$this->assertSame( 'https://github.com/' . StripeRun::declaration()->repository(), StripeRun::REPOSITORY_URL );
+		$this->assertSame( 'a8c53d85-ff8c-52ea-9f2c-67efde16e51b', StripeRun::installUuid() );
 	}
 }
