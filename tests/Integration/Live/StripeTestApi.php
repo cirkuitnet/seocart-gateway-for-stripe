@@ -13,7 +13,7 @@ namespace SEOCart\GatewayForStripe\Tests\Integration\Live;
 
 use SEOCart\GatewayForStripe\Gateway;
 use SEOCart\GatewayForStripe\StripeApi;
-use SEOCart\GatewayForStripe\Tests\Support\Live\MessageGuard;
+use SEOCart\GatewayForStripe\Tests\Support\Live\StripeRun;
 
 /**
  * Asks Stripe's test mode what the live tests check, and ends what a run leaves open: reads, a PaymentIntent's cancellation, a webhook endpoint's deletion.
@@ -138,7 +138,7 @@ final class StripeTestApi {
 			$after = (string) ( end( $data )['id'] ?? '' );
 		}
 
-		throw new \RuntimeException( MessageGuard::say( 'Stripe\'s list %1$s ran past %2$d pages.', $path, $pages ) );
+		throw new \RuntimeException( StripeRun::guard()->say( 'Stripe\'s list %1$s ran past %2$d pages.', $path, $pages ) );
 	}
 
 	/**
@@ -161,7 +161,7 @@ final class StripeTestApi {
 		$curl = curl_init( $url );
 
 		if ( false === $curl ) {
-			throw new \RuntimeException( MessageGuard::say( 'A request for %1$s %2$s could not be made.', $method, $path ) );
+			throw new \RuntimeException( StripeRun::guard()->say( 'A request for %1$s %2$s could not be made.', $method, $path ) );
 		}
 
 		curl_setopt_array(
@@ -186,7 +186,7 @@ final class StripeTestApi {
 		// phpcs:enable
 
 		if ( 0 !== $failed || ! is_string( $body ) ) {
-			throw new \RuntimeException( MessageGuard::say( 'Stripe could not be reached for %1$s %2$s (curl error %3$d).', $method, $path, $failed ) );
+			throw new \RuntimeException( StripeRun::guard()->say( 'Stripe could not be reached for %1$s %2$s (curl error %3$d).', $method, $path, $failed ) );
 		}
 
 		$answer = json_decode( $body, true );
@@ -194,7 +194,7 @@ final class StripeTestApi {
 		if ( $status < 200 || $status > 299 || ! is_array( $answer ) ) {
 			$code = is_array( $answer ) && is_string( $answer['error']['code'] ?? null ) && 1 === preg_match( '/^[a-z_]{1,64}$/D', $answer['error']['code'] ) ? $answer['error']['code'] : 'none';
 
-			throw new \RuntimeException( MessageGuard::say( 'Stripe answered %1$s %2$s with HTTP %3$d (code %4$s).', $method, $path, $status, $code ) );
+			throw new \RuntimeException( StripeRun::guard()->say( 'Stripe answered %1$s %2$s with HTTP %3$d (code %4$s).', $method, $path, $status, $code ) );
 		}
 
 		return $answer;

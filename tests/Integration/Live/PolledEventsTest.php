@@ -12,7 +12,7 @@ declare( strict_types=1 );
 namespace SEOCart\GatewayForStripe\Tests\Integration\Live;
 
 use SEOCart\GatewayForStripe\Tests\Support\Live\EventSelection;
-use SEOCart\GatewayForStripe\Tests\Support\Live\MessageGuard;
+use SEOCart\GatewayForStripe\Tests\Support\Live\StripeRun;
 
 require_once __DIR__ . '/LiveStripeCase.php';
 
@@ -59,7 +59,7 @@ final class PolledEventsTest extends LiveStripeCase {
 				$tally  = self::tallied( $tally, $answer, $event );
 
 				if ( 200 !== $answer['status'] ) {
-					$faults[] = MessageGuard::say( '%1$s delivered %2$s answered %3$d %4$s', (string) ( $event['id'] ?? '' ), $round, $answer['status'], (string) $answer['code'] );
+					$faults[] = StripeRun::guard()->say( '%1$s delivered %2$s answered %3$d %4$s', (string) ( $event['id'] ?? '' ), $round, $answer['status'], (string) $answer['code'] );
 				}
 			}
 		}

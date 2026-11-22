@@ -14,11 +14,11 @@ namespace SEOCart\GatewayForStripe\Tests\Integration\Live;
 use SEOCart\Checkout\Application\ResumePayment;
 use SEOCart\Checkout\Infrastructure\Jobs\ReconcileStalePlacements;
 use SEOCart\GatewayForStripe\Tests\Support\Live\EventSelection;
-use SEOCart\GatewayForStripe\Tests\Support\Live\LiveRun;
-use SEOCart\GatewayForStripe\Tests\Support\Live\MessageGuard;
+use SEOCart\GatewayForStripe\Tests\Support\Live\StripeRun;
 use SEOCart\Inventory\Infrastructure\InventoryTables;
 use SEOCart\Order\Infrastructure\OrderTables;
 use SEOCart\Payment\Infrastructure\PaymentTables;
+use SEOCart\Tests\Conformance\Payment\Live\LiveRun;
 
 require_once __DIR__ . '/LiveStripeCase.php';
 
@@ -51,7 +51,7 @@ final class ThreeDSecureTest extends LiveStripeCase {
 		$placed = $this->placeThreeDSecure();
 		$word   = $this->completeInBrowser( $placed['next_action'], 'authorize' );
 
-		$this->assertSame( 'succeeded', $word, MessageGuard::say( 'The bank\'s page answered %s when authorize was pressed.', $word ) );
+		$this->assertSame( 'succeeded', $word, StripeRun::guard()->say( 'The bank\'s page answered %s when authorize was pressed.', $word ) );
 
 		$resumed = $this->resume( $placed['intent_uuid'] );
 		$this->end();
@@ -67,7 +67,7 @@ final class ThreeDSecureTest extends LiveStripeCase {
 
 		$intent = $this->stripeIntent( (string) $placed['intent_id'] );
 
-		$this->assertSame( 'requires_capture', $intent['status'] ?? null, MessageGuard::say( 'Stripe holds the PaymentIntent %1$s %2$s, not requires_capture.', (string) $placed['intent_id'], (string) ( $intent['status'] ?? 'none' ) ) );
+		$this->assertSame( 'requires_capture', $intent['status'] ?? null, StripeRun::guard()->say( 'Stripe holds the PaymentIntent %1$s %2$s, not requires_capture.', (string) $placed['intent_id'], (string) ( $intent['status'] ?? 'none' ) ) );
 		$this->assertSame( $this->intentRow( $placed['intent_uuid'] )['amount_minor'], (int) ( $intent['amount_capturable'] ?? 0 ), 'Stripe holds another amount for capture than the order\'s.' );
 
 		$this->begin( 'live-three-d-secure-failed' );
@@ -75,7 +75,7 @@ final class ThreeDSecureTest extends LiveStripeCase {
 		$failed = $this->placeThreeDSecure();
 		$word   = $this->completeInBrowser( $failed['next_action'], 'fail' );
 
-		$this->assertSame( 'failed', $word, MessageGuard::say( 'The bank\'s page answered %s when fail was pressed.', $word ) );
+		$this->assertSame( 'failed', $word, StripeRun::guard()->say( 'The bank\'s page answered %s when fail was pressed.', $word ) );
 
 		$resumed = $this->resume( $failed['intent_uuid'] );
 		$this->end();
@@ -100,7 +100,7 @@ final class ThreeDSecureTest extends LiveStripeCase {
 		$placed = $this->placeThreeDSecure();
 		$word   = $this->completeInBrowser( $placed['next_action'], 'authorize' );
 
-		$this->assertSame( 'succeeded', $word, MessageGuard::say( 'The bank\'s page answered %s when authorize was pressed.', $word ) );
+		$this->assertSame( 'succeeded', $word, StripeRun::guard()->say( 'The bank\'s page answered %s when authorize was pressed.', $word ) );
 
 		$this->endWait( $placed['intent_uuid'], ReconcileStalePlacements::STALE_SECONDS + 1 );
 		$this->kernel->get( ReconcileStalePlacements::class )->handle( array() );
@@ -110,9 +110,9 @@ final class ThreeDSecureTest extends LiveStripeCase {
 		$intent = $this->stripeIntent( (string) $placed['intent_id'] );
 		$pair   = $store['status'] . '/' . (string) ( $intent['status'] ?? 'none' );
 
-		LiveRun::report( 'window-end-after-approval', $pair );
+		LiveRun::report( StripeRun::declaration(), 'window-end-after-approval', $pair );
 
-		$this->assertContains( $pair, array( 'voided/canceled', 'authorized/requires_capture', 'authorized/succeeded' ), MessageGuard::say( 'The store and Stripe disagree at the window\'s end: %s.', $pair ) );
+		$this->assertContains( $pair, array( 'voided/canceled', 'authorized/requires_capture', 'authorized/succeeded' ), StripeRun::guard()->say( 'The store and Stripe disagree at the window\'s end: %s.', $pair ) );
 		$this->assertSame( 0, (int) ( $intent['amount_received'] ?? -1 ), 'Stripe captured the payment.' );
 		$this->assertSame( 0, $store['captured_minor'], 'The store captured the payment.' );
 	}
@@ -128,7 +128,7 @@ final class ThreeDSecureTest extends LiveStripeCase {
 		$placed = $this->placeThreeDSecure();
 		$word   = $this->completeInBrowser( $placed['next_action'], 'authorize' );
 
-		$this->assertSame( 'succeeded', $word, MessageGuard::say( 'The bank\'s page answered %s when authorize was pressed.', $word ) );
+		$this->assertSame( 'succeeded', $word, StripeRun::guard()->say( 'The bank\'s page answered %s when authorize was pressed.', $word ) );
 
 		$id     = (string) $placed['intent_id'];
 		$events = $this->eventsOf( array( $id => $placed['intent_uuid'] ), array( $id => array( 'payment_intent.amount_capturable_updated' ) ) );
@@ -141,7 +141,7 @@ final class ThreeDSecureTest extends LiveStripeCase {
 		self::reportTally( 'api-versions-before', EventSelection::apiVersions( array( $event ) ) );
 		self::reportTally( 'before-delivery', self::tallied( array( 'resume ' . (string) ( $resumed['outcome'] ?? 'none' ) => 1 ), $answer, $event ) );
 
-		$this->assertSame( 200, $answer['status'], MessageGuard::say( 'The store answered Stripe\'s event of the approval %1$d %2$s.', $answer['status'], (string) $answer['code'] ) );
+		$this->assertSame( 200, $answer['status'], StripeRun::guard()->say( 'The store answered Stripe\'s event of the approval %1$d %2$s.', $answer['status'], (string) $answer['code'] ) );
 		$this->assertSafe( array( $placed['order_id'] ), array( (string) $event['id'] ) );
 
 		if ( self::atThePin( $event ) ) {

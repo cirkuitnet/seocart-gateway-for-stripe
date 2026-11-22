@@ -95,7 +95,7 @@ final class ListenerThrows {
 		try {
 			return ( $this->listener )( ...$arguments );
 		} catch ( \Throwable $thrown ) {
-			self::$kept = get_class( $thrown ) . ': ' . MessageGuard::redact( $thrown->getMessage() );
+			self::$kept = get_class( $thrown ) . ': ' . StripeRun::guard()->redact( $thrown->getMessage() );
 
 			throw $thrown;
 		}

@@ -16,8 +16,7 @@ use SEOCart\Contracts\Payment\Mode;
 use SEOCart\Contracts\Payment\WebhookProvisioning;
 use SEOCart\GatewayForStripe\Gateway;
 use SEOCart\GatewayForStripe\Tests\Support\Live\CleanupSelection;
-use SEOCart\GatewayForStripe\Tests\Support\Live\LiveRun;
-use SEOCart\GatewayForStripe\Tests\Support\Live\MessageGuard;
+use SEOCart\GatewayForStripe\Tests\Support\Live\StripeRun;
 use SEOCart\GatewayForStripe\WebhookEndpoints;
 use SEOCart\Payment\Application\GatewayConfiguration;
 use SEOCart\Payment\Application\GatewayConfigured;
@@ -30,6 +29,7 @@ use SEOCart\Platform\Logging\Reporter;
 use SEOCart\Platform\Secrets\SecretVault;
 use SEOCart\Platform\Settings\SettingsService;
 use SEOCart\Platform\Settings\SettingsStore;
+use SEOCart\Tests\Conformance\Payment\Live\LiveRun;
 use SEOCart\Tests\Support\Payment\GatewayKernel;
 
 require_once __DIR__ . '/LiveStripeCase.php';
@@ -70,12 +70,12 @@ final class EndpointProvisioningTest extends LiveStripeCase {
 		$first = $this->configureWithWebhooks();
 
 		if ( GatewayConfigured::FAILED === $first->webhooks ) {
-			LiveRun::report( 'endpoint-address', 'refused for the test site; set up on ' . self::FALLBACK_ORIGIN );
+			LiveRun::report( StripeRun::declaration(), 'endpoint-address', 'refused for the test site; set up on ' . self::FALLBACK_ORIGIN );
 			add_filter( 'rest_url', array( self::class, 'onFallbackOrigin' ) );
 			$first = $this->configureWithWebhooks();
 		}
 
-		$this->assertContains( $first->webhooks, array( WebhookProvisioning::CREATED, WebhookProvisioning::REPLACED ), MessageGuard::say( 'Setting up the endpoint ended %s.', $first->webhooks ) );
+		$this->assertContains( $first->webhooks, array( WebhookProvisioning::CREATED, WebhookProvisioning::REPLACED ), StripeRun::guard()->say( 'Setting up the endpoint ended %s.', $first->webhooks ) );
 		$this->assertNotNull( $first->endpointId );
 
 		$second = $this->configureWithWebhooks();
@@ -90,7 +90,7 @@ final class EndpointProvisioningTest extends LiveStripeCase {
 		sort( $events );
 		sort( $expected );
 
-		$this->assertSame( array( LiveRun::installUuid(), Mode::Test->value ), array( $endpoint['metadata'][ WebhookEndpoints::TAG_INSTALL ] ?? null, $endpoint['metadata'][ WebhookEndpoints::TAG_MODE ] ?? null ), 'The endpoint is not tagged as this installation\'s test mode.' );
+		$this->assertSame( array( StripeRun::installUuid(), Mode::Test->value ), array( $endpoint['metadata'][ WebhookEndpoints::TAG_INSTALL ] ?? null, $endpoint['metadata'][ WebhookEndpoints::TAG_MODE ] ?? null ), 'The endpoint is not tagged as this installation\'s test mode.' );
 		$this->assertSame( $expected, $events, 'The endpoint is not subscribed to exactly the events the adapter reads.' );
 		$this->assertSame( Gateway::API_VERSION, $endpoint['api_version'] ?? null, 'The endpoint is not at the API version the adapter pins.' );
 		$this->assertSame( WebhookAddress::url( Gateway::ID, Mode::Test ), $endpoint['url'] ?? null, 'The endpoint is not at the store\'s webhook address.' );
@@ -98,7 +98,7 @@ final class EndpointProvisioningTest extends LiveStripeCase {
 
 		$this->stripe->delete( 'webhook_endpoints/' . $first->endpointId );
 
-		$this->assertSame( array(), CleanupSelection::endpointsToDelete( $this->stripe->all( 'webhook_endpoints' ), LiveRun::installUuid(), WebhookEndpoints::TAG_INSTALL ), 'An endpoint of this installation is left at Stripe.' );
+		$this->assertSame( array(), CleanupSelection::endpointsToDelete( $this->stripe->all( 'webhook_endpoints' ), StripeRun::installUuid(), WebhookEndpoints::TAG_INSTALL ), 'An endpoint of this installation is left at Stripe.' );
 	}
 
 	/**
@@ -136,7 +136,7 @@ final class EndpointProvisioningTest extends LiveStripeCase {
 			$this->kernel->get( SecretVault::class ),
 			$this->kernel->get( TransactionManager::class ),
 			$this->kernel->get( Authorizer::class ),
-			static fn(): string => LiveRun::installUuid(),
+			static fn(): string => StripeRun::installUuid(),
 			$this->kernel->get( Reporter::class )
 		);
 

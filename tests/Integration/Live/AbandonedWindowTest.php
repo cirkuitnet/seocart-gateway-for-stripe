@@ -14,7 +14,7 @@ namespace SEOCart\GatewayForStripe\Tests\Integration\Live;
 use SEOCart\Cart\Infrastructure\CartTables;
 use SEOCart\Checkout\Infrastructure\CheckoutTables;
 use SEOCart\Checkout\Infrastructure\Jobs\ReconcileStalePlacements;
-use SEOCart\GatewayForStripe\Tests\Support\Live\MessageGuard;
+use SEOCart\GatewayForStripe\Tests\Support\Live\StripeRun;
 use SEOCart\Inventory\Infrastructure\InventoryTables;
 use SEOCart\Order\Infrastructure\OrderTables;
 use SEOCart\Payment\Infrastructure\PaymentTables;
@@ -51,7 +51,7 @@ final class AbandonedWindowTest extends LiveStripeCase {
 
 		$intent = $this->stripeIntent( (string) $placed['intent_id'] );
 
-		$this->assertSame( array( 'canceled', 'abandoned' ), array( $intent['status'] ?? null, $intent['cancellation_reason'] ?? null ), MessageGuard::say( 'Stripe holds the PaymentIntent %1$s %2$s, not canceled as abandoned.', (string) $placed['intent_id'], (string) ( $intent['status'] ?? 'none' ) ) );
+		$this->assertSame( array( 'canceled', 'abandoned' ), array( $intent['status'] ?? null, $intent['cancellation_reason'] ?? null ), StripeRun::guard()->say( 'Stripe holds the PaymentIntent %1$s %2$s, not canceled as abandoned.', (string) $placed['intent_id'], (string) ( $intent['status'] ?? 'none' ) ) );
 
 		$order = (array) $this->db->fetchRow( 'SELECT status, payment_status, has_unreconciled_money FROM %i WHERE id = %d', $this->table( OrderTables::ORDERS ), $placed['order_id'] );
 

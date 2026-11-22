@@ -12,9 +12,9 @@ declare( strict_types=1 );
 namespace SEOCart\GatewayForStripe\Tests\Integration\Live;
 
 use SEOCart\GatewayForStripe\Tests\Support\Live\EventSelection;
-use SEOCart\GatewayForStripe\Tests\Support\Live\LiveRun;
-use SEOCart\GatewayForStripe\Tests\Support\Live\MessageGuard;
 use SEOCart\GatewayForStripe\Tests\Support\Live\SoakPlan;
+use SEOCart\GatewayForStripe\Tests\Support\Live\StripeRun;
+use SEOCart\Tests\Conformance\Payment\Live\LiveRun;
 
 require_once __DIR__ . '/LiveStripeCase.php';
 require_once dirname( __DIR__, 2 ) . '/Support/Live/SoakPlan.php';
@@ -50,11 +50,11 @@ final class SoakTest extends LiveStripeCase {
 	 * @since 0.2.0
 	 */
 	public function test_a_soak_of_real_events_settles_every_payment_once(): void {
-		$size = SoakPlan::size( '' === (string) getenv( LiveRun::SOAK_SIZE ) ? self::DEFAULT_SIZE : (string) getenv( LiveRun::SOAK_SIZE ) );
-		$seed = '' === (string) getenv( LiveRun::SOAK_SEED ) ? random_int( 1, 2147483647 ) : (int) getenv( LiveRun::SOAK_SEED );
+		$size = SoakPlan::size( '' === (string) getenv( StripeRun::SOAK_SIZE ) ? self::DEFAULT_SIZE : (string) getenv( StripeRun::SOAK_SIZE ) );
+		$seed = '' === (string) getenv( StripeRun::SOAK_SEED ) ? random_int( 1, 2147483647 ) : (int) getenv( StripeRun::SOAK_SEED );
 
-		LiveRun::report( 'seed', $seed );
-		LiveRun::report( 'soak-size', $size );
+		LiveRun::report( StripeRun::declaration(), 'seed', $seed );
+		LiveRun::report( StripeRun::declaration(), 'soak-size', $size );
 
 		$this->begin( 'live-soak' );
 
@@ -97,13 +97,13 @@ final class SoakTest extends LiveStripeCase {
 			$tally = self::tallied( $tally, $answer, $event );
 
 			if ( ( 'rejected' === $delivery['expect'] ? 401 : 200 ) !== $answer['status'] ) {
-				$faults[] = MessageGuard::say( 'delivery %1$d, %2$s of %3$s, answered %4$d %5$s', $position, $delivery['kind'], $delivery['event'], $answer['status'], (string) $answer['code'] );
+				$faults[] = StripeRun::guard()->say( 'delivery %1$d, %2$s of %3$s, answered %4$d %5$s', $position, $delivery['kind'], $delivery['event'], $answer['status'], (string) $answer['code'] );
 			}
 		}
 
 		self::reportTally( 'api-versions', EventSelection::apiVersions( $events ) );
 		self::reportTally( 'soak-answers', $tally );
-		LiveRun::report( 'soak-deliveries', count( $plan ) );
+		LiveRun::report( StripeRun::declaration(), 'soak-deliveries', count( $plan ) );
 
 		$this->assertSame( array(), $faults, 'A delivery of the soak was answered otherwise than its kind expects.' );
 		$this->assertSafe( array_column( $placed, 'order_id' ), array_keys( $byId ) );

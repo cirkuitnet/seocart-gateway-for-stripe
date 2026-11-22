@@ -15,9 +15,11 @@ use Brain\Monkey;
 use Brain\Monkey\Functions;
 use PHPUnit\Framework\TestCase;
 use SEOCart\GatewayForStripe\Tests\Support\Live\CleanupSelection;
-use SEOCart\GatewayForStripe\Tests\Support\Live\WorkflowStep;
+use SEOCart\GatewayForStripe\Tests\Support\Live\StripeRun;
 use SEOCart\GatewayForStripe\WebhookEndpoints;
 use SEOCart\Tests\Conformance\Payment\Exchange;
+use SEOCart\Tests\Conformance\Payment\Live\LiveRun;
+use SEOCart\Tests\Conformance\Payment\Live\WorkflowStep;
 
 /**
  * The cleanup cancels only the run's PaymentIntents that still wait, and deletes only the endpoints tagged with the run's installation: a planted intent or endpoint of anyone else is never picked. Every intent the conformance suite creates reaches the run list, read from the tapes it recorded, and only from those; every intent a live test's placement creates, a declined one included, is read from Stripe's answers to the gateway's requests.
@@ -57,11 +59,11 @@ final class LiveCleanupSelectionTest extends TestCase {
 	 * @since 0.2.0
 	 */
 	public function test_only_the_runs_waiting_intents_are_cancelled(): void {
-		$runList = CleanupSelection::runList(
-			CleanupSelection::line( 'pi_waiting', '00000000-0000-5000-8000-000000000001' )
-			. CleanupSelection::line( 'pi_done', '00000000-0000-5000-8000-000000000002' )
-			. CleanupSelection::line( 'pi_capturable', '00000000-0000-5000-8000-000000000003' )
-			. CleanupSelection::line( 'pi_retagged', '00000000-0000-5000-8000-000000000004' )
+		$runList = LiveRun::runList(
+			LiveRun::line( 'pi_waiting', '00000000-0000-5000-8000-000000000001' )
+			. LiveRun::line( 'pi_done', '00000000-0000-5000-8000-000000000002' )
+			. LiveRun::line( 'pi_capturable', '00000000-0000-5000-8000-000000000003' )
+			. LiveRun::line( 'pi_retagged', '00000000-0000-5000-8000-000000000004' )
 			. "a line of another shape\n"
 		);
 		$intents = array(
@@ -234,7 +236,7 @@ final class LiveCleanupSelectionTest extends TestCase {
 		touch( $work . '/run-list' );
 
 		$this->assertIsResource( $messages );
-		$this->assertSame( 1, WorkflowStep::harvest( dirname( __DIR__ ) . '/tapes', $work . '/no-mark', $work . '/run-list', $messages ) );
+		$this->assertSame( 1, WorkflowStep::harvest( StripeRun::declaration(), dirname( __DIR__ ) . '/tapes', $work . '/no-mark', $work . '/run-list', $messages ) );
 		$this->assertSame( '', file_get_contents( $work . '/run-list' ) );
 	}
 
@@ -254,9 +256,9 @@ final class LiveCleanupSelectionTest extends TestCase {
 		self::assertIsResource( $messages );
 		touch( $work . '/mark', $since );
 		touch( $work . '/run-list' );
-		self::assertSame( 0, WorkflowStep::harvest( $tapes, $work . '/mark', $work . '/run-list', $messages ) );
+		self::assertSame( 0, WorkflowStep::harvest( StripeRun::declaration(), $tapes, $work . '/mark', $work . '/run-list', $messages ) );
 
-		return CleanupSelection::runList( (string) file_get_contents( $work . '/run-list' ) );
+		return LiveRun::runList( (string) file_get_contents( $work . '/run-list' ) );
 	}
 
 	/**

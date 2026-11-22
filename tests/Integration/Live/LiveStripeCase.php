@@ -22,8 +22,7 @@ use SEOCart\GatewayForStripe\Tests\Integration\StripeSuiteDeclarations;
 use SEOCart\GatewayForStripe\Tests\Support\Live\CleanupSelection;
 use SEOCart\GatewayForStripe\Tests\Support\Live\EventSelection;
 use SEOCart\GatewayForStripe\Tests\Support\Live\ListenerThrows;
-use SEOCart\GatewayForStripe\Tests\Support\Live\LiveRun;
-use SEOCart\GatewayForStripe\Tests\Support\Live\MessageGuard;
+use SEOCart\GatewayForStripe\Tests\Support\Live\StripeRun;
 use SEOCart\Interfaces\Operations\ErrorTranslator;
 use SEOCart\Inventory\Infrastructure\InventoryTables;
 use SEOCart\Order\Infrastructure\OrderTables;
@@ -36,6 +35,7 @@ use SEOCart\Platform\Logging\Reporter;
 use SEOCart\Support\Error\CodedException;
 use SEOCart\Tests\Conformance\Payment\ConformanceHarness;
 use SEOCart\Tests\Conformance\Payment\Exchange;
+use SEOCart\Tests\Conformance\Payment\Live\LiveRun;
 use SEOCart\Tests\Conformance\Payment\RecordingTransport;
 use SEOCart\Tests\Support\Doubles\FrozenClock;
 use SEOCart\Tests\Support\KernelHooks;
@@ -43,9 +43,8 @@ use SEOCart\Tests\Support\KernelHooks;
 // SEOCart's integration bootstrap autoloads this plugin's src/ alone: the suite's declarations, the test's Stripe client and the pure helpers are loaded by their path.
 require_once dirname( __DIR__ ) . '/StripeSuiteDeclarations.php';
 require_once __DIR__ . '/StripeTestApi.php';
-require_once dirname( __DIR__, 2 ) . '/Support/Live/MessageGuard.php';
 require_once dirname( __DIR__, 2 ) . '/Support/Live/ListenerThrows.php';
-require_once dirname( __DIR__, 2 ) . '/Support/Live/LiveRun.php';
+require_once dirname( __DIR__, 2 ) . '/Support/Live/StripeRun.php';
 require_once dirname( __DIR__, 2 ) . '/Support/Live/EventSelection.php';
 require_once dirname( __DIR__, 2 ) . '/Support/Live/CleanupSelection.php';
 
@@ -244,7 +243,7 @@ abstract class LiveStripeCase extends ConformanceHarness {
 		$thrown = ListenerThrows::taken();
 
 		if ( null !== $thrown ) {
-			$message = $t->getMessage() . ' ' . MessageGuard::say( 'A listener of the registration action threw %s', $thrown );
+			$message = $t->getMessage() . ' ' . StripeRun::guard()->say( 'A listener of the registration action threw %s', $thrown );
 
 			throw $t instanceof AssertionFailedError ? new AssertionFailedError( $message, 0, $t ) : new \LogicException( $message, 0, $t );
 		}
@@ -349,7 +348,7 @@ abstract class LiveStripeCase extends ConformanceHarness {
 		$created = CleanupSelection::createdBy( array_map( static fn( Exchange $exchange ): array => $exchange->toTape(), array_slice( $this->transport->exchanges(), $sentBefore ) ) );
 
 		foreach ( $created as $intentId => $intentUuid ) {
-			LiveRun::append( LiveRun::RUN_LIST, CleanupSelection::line( $intentId, $intentUuid ) );
+			LiveRun::append( LiveRun::RUN_LIST, LiveRun::line( $intentId, $intentUuid ) );
 		}
 
 		return $created;
@@ -366,7 +365,7 @@ abstract class LiveStripeCase extends ConformanceHarness {
 	protected function placeThreeDSecure( ?string $code = null ): array {
 		$placed = $this->placeLive( self::REQUIRES_ACTION, $code );
 
-		$this->assertSame( 'requires_action', $placed['outcome'], MessageGuard::say( 'The 3-D Secure payment answered %s, not a request to act.', $placed['outcome'] ) );
+		$this->assertSame( 'requires_action', $placed['outcome'], StripeRun::guard()->say( 'The 3-D Secure payment answered %s, not a request to act.', $placed['outcome'] ) );
 		$this->assertNotNull( $placed['intent_id'], 'The waiting payment has no PaymentIntent at Stripe.' );
 
 		return $placed;
@@ -389,8 +388,8 @@ abstract class LiveStripeCase extends ConformanceHarness {
 		};
 		$placed = $this->placeLive( $token, null, 2 ) + array( 'kind' => $kind );
 
-		$this->assertSame( 'declined' === $kind ? 'declined' : 'approved', $placed['outcome'], MessageGuard::say( 'A %1$s payment answered %2$s.', $kind, $placed['outcome'] ) );
-		$this->assertNotNull( $placed['intent_id'], MessageGuard::say( 'A %s payment has no PaymentIntent at Stripe.', $kind ) );
+		$this->assertSame( 'declined' === $kind ? 'declined' : 'approved', $placed['outcome'], StripeRun::guard()->say( 'A %1$s payment answered %2$s.', $kind, $placed['outcome'] ) );
+		$this->assertNotNull( $placed['intent_id'], StripeRun::guard()->say( 'A %s payment has no PaymentIntent at Stripe.', $kind ) );
 
 		if ( in_array( $kind, array( 'captured', 'disputed', 'refunded' ), true ) ) {
 			$this->capture( $placed['intent_uuid'] );
@@ -519,7 +518,7 @@ abstract class LiveStripeCase extends ConformanceHarness {
 			}
 
 			if ( time() >= $deadline ) {
-				self::fail( MessageGuard::say( 'Within %1$d seconds Stripe listed no %2$s.', self::EVENTS_WAIT, implode( '; ', $missing ) ) );
+				self::fail( StripeRun::guard()->say( 'Within %1$d seconds Stripe listed no %2$s.', self::EVENTS_WAIT, implode( '; ', $missing ) ) );
 			}
 
 			sleep( self::EVENTS_POLL );
@@ -640,8 +639,8 @@ abstract class LiveStripeCase extends ConformanceHarness {
 		}
 
 		foreach ( $receipts as $eventId => $rows ) {
-			$this->assertSame( 1, count( $rows ), MessageGuard::say( 'The event %1$s has %2$d receipts, not one.', $eventId, count( $rows ) ) );
-			$this->assertNotNull( $rows[0]['result'] ?? null, MessageGuard::say( 'The receipt of the event %s is undecided.', $eventId ) );
+			$this->assertSame( 1, count( $rows ), StripeRun::guard()->say( 'The event %1$s has %2$d receipts, not one.', $eventId, count( $rows ) ) );
+			$this->assertNotNull( $rows[0]['result'] ?? null, StripeRun::guard()->say( 'The receipt of the event %s is undecided.', $eventId ) );
 		}
 
 		$ids = implode( ',', array_map( 'intval', $orderIds ) );
@@ -653,8 +652,8 @@ abstract class LiveStripeCase extends ConformanceHarness {
 			$held    = (int) $this->db->fetchValue( 'SELECT COUNT(*) FROM %i WHERE order_id IN (' . $ids . ')', $this->table( InventoryTables::HOLDS ) );
 			// phpcs:enable
 
-			$this->assertSame( array(), $doubled, MessageGuard::say( 'An order has two money rows of one operation: %s.', implode( ', ', array_map( static fn( array $row ): string => $row['order_id'] . ' ' . $row['operation'], $doubled ) ) ) );
-			$this->assertSame( array(), $flagged, MessageGuard::say( 'Orders were flagged for a person: %s.', implode( ', ', array_column( $flagged, 'id' ) ) ) );
+			$this->assertSame( array(), $doubled, StripeRun::guard()->say( 'An order has two money rows of one operation: %s.', implode( ', ', array_map( static fn( array $row ): string => $row['order_id'] . ' ' . $row['operation'], $doubled ) ) ) );
+			$this->assertSame( array(), $flagged, StripeRun::guard()->say( 'Orders were flagged for a person: %s.', implode( ', ', array_column( $flagged, 'id' ) ) ) );
 			$this->assertSame( 0, $held, 'A stock hold of the run\'s orders is left.' );
 		}
 
@@ -727,7 +726,7 @@ abstract class LiveStripeCase extends ConformanceHarness {
 	 */
 	protected function assertLedgersAsTheirKinds( array $placed ): void {
 		foreach ( $placed as $placement ) {
-			$this->assertSame( self::KIND_LEDGER[ $placement['kind'] ], $this->ledgerOf( $placement['order_id'] ), MessageGuard::say( 'The ledger of a %1$s payment, order %2$d.', $placement['kind'], $placement['order_id'] ) );
+			$this->assertSame( self::KIND_LEDGER[ $placement['kind'] ], $this->ledgerOf( $placement['order_id'] ), StripeRun::guard()->say( 'The ledger of a %1$s payment, order %2$d.', $placement['kind'], $placement['order_id'] ) );
 		}
 	}
 
@@ -740,7 +739,7 @@ abstract class LiveStripeCase extends ConformanceHarness {
 	 * @param array<string, int> $tally The tally.
 	 */
 	protected static function reportTally( string $key, array $tally ): void {
-		LiveRun::report( $key, implode( ', ', array_map( static fn( string $name, int $count ): string => $name . ' x' . $count, array_keys( $tally ), $tally ) ) );
+		LiveRun::report( StripeRun::declaration(), $key, implode( ', ', array_map( static fn( string $name, int $count ): string => $name . ' x' . $count, array_keys( $tally ), $tally ) ) );
 	}
 
 	/**

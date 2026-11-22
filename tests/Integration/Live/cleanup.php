@@ -22,8 +22,9 @@ declare( strict_types=1 );
 
 use SEOCart\GatewayForStripe\Tests\Integration\Live\StripeTestApi;
 use SEOCart\GatewayForStripe\Tests\Support\Live\CleanupSelection;
-use SEOCart\GatewayForStripe\Tests\Support\Live\LiveRun;
+use SEOCart\GatewayForStripe\Tests\Support\Live\StripeRun;
 use SEOCart\GatewayForStripe\WebhookEndpoints;
+use SEOCart\Tests\Conformance\Payment\Live\LiveRun;
 
 if ( 'cli' !== PHP_SAPI ) {
 	exit( 1 );
@@ -38,7 +39,7 @@ if ( ! in_array( $argv[3] ?? '', array( '', 'endpoints' ), true ) ) {
 }
 
 $seocart_gateway_for_stripe_settings  = (array) json_decode( is_readable( $argv[1] ?? '' ) ? (string) file_get_contents( $argv[1] ) : '', true );
-$seocart_gateway_for_stripe_run_list  = CleanupSelection::runList( is_readable( $argv[2] ?? '' ) ? (string) file_get_contents( $argv[2] ) : '' );
+$seocart_gateway_for_stripe_run_list  = LiveRun::runList( is_readable( $argv[2] ?? '' ) ? (string) file_get_contents( $argv[2] ) : '' );
 $seocart_gateway_for_stripe_endpoints = 'endpoints' === ( $argv[3] ?? '' );
 
 if ( ! is_string( $seocart_gateway_for_stripe_settings['secret_key'] ?? null ) ) {
@@ -75,7 +76,7 @@ function seocart_gateway_for_stripe_read_back( StripeTestApi $api, array $runLis
 
 	if ( $endpoints ) {
 		try {
-			$ours = CleanupSelection::endpointsToDelete( $api->all( 'webhook_endpoints' ), LiveRun::installUuid(), WebhookEndpoints::TAG_INSTALL );
+			$ours = CleanupSelection::endpointsToDelete( $api->all( 'webhook_endpoints' ), StripeRun::installUuid(), WebhookEndpoints::TAG_INSTALL );
 		} catch ( \RuntimeException $failed ) {
 			$failures[] = $failed->getMessage();
 		}

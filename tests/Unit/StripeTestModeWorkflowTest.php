@@ -18,7 +18,7 @@ use SEOCart\Tests\Conformance\Payment\Live\SettingsLast;
 use SEOCart\Tests\Conformance\Payment\Live\WorkflowFacts;
 
 /**
- * The Stripe test mode workflow keeps every fact SEOCart's WorkflowFacts reads with the plugin's declaration (tests/live.php): it starts only on its schedule or by hand, has no job named ci, reads the repository and nothing more, runs each job only in this repository, gives a secret only to the env of a step that needs it, never traces the shell, prints the environment or uploads a file, runs one at a time uncancelled, limits every job's time, has as its jobs and as the choices of its parts input the parts the declaration states, and checks SEOCart out before its verdict. Each job writes its settings file, which holds the key, after everything that installs or builds, and runs nothing after it but the steps SettingsLast's closed lists allow: SEOCart's suite and live steps, and Stripe's configure, checkout and cleanup. The soak-size step gives the size the soak takes to the job's later steps.
+ * The Stripe test mode workflow keeps every fact SEOCart's WorkflowFacts reads with the plugin's declaration (tests/live.php): it starts only on its schedule or by hand, has no job named ci, reads the repository and nothing more, runs each job only in this repository, gives a secret only to the env of a step that needs it, never traces the shell, prints the environment or uploads a file, runs one at a time uncancelled, limits every job's time, has as its jobs and as the choices of its parts input the parts the declaration states, and checks SEOCart out before its verdict. Each job writes its settings file, which holds the key, after everything that installs or builds, and runs nothing after it but the steps SettingsLast's closed lists allow: SEOCart's suite and live steps, and Stripe's configure, checkout and cleanup. The soak-size step gives the size the soak takes to the job's later steps. No class of SEOCart's live workflow is left copied in the plugin's tests.
  *
  * Pins, the PHP set-up, Composer, the Node.js version and the reference to SEOCart's action are
  * SEOCart's check of workflows' (`sh ../seocart/bin/ci/check-workflows.sh .`), which the required
@@ -30,7 +30,8 @@ use SEOCart\Tests\Conformance\Payment\Live\WorkflowFacts;
  *   list fails naming the action;
  * - `npx playwright test` put back in the script's checkout(), in the file: the closed list fails
  *   naming the command;
- * - the soak-size step's check of the size removed: 99 is written to the job's environment.
+ * - the soak-size step's check of the size removed: 99 is written to the job's environment;
+ * - tests/Support/Live/Verdict.php restored: the copies' test fails naming it.
  *
  * @since 0.2.0
  */
@@ -176,6 +177,15 @@ final class StripeTestModeWorkflowTest extends TestCase {
 		} finally {
 			unlink( $file );
 		}
+	}
+
+	/**
+	 * Tests that no file of the plugin's tests declares a class of SEOCart's live workflow: a copy left behind would drift from SEOCart's.
+	 *
+	 * @since 0.2.0
+	 */
+	public function test_no_class_of_seocarts_live_workflow_is_left_copied(): void {
+		$this->assertSame( array(), WorkflowFacts::copies( dirname( __DIR__, 2 ) ) );
 	}
 
 	/**

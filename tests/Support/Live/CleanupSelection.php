@@ -61,26 +61,6 @@ final class CleanupSelection {
 	private const UUID = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
 
 	/**
-	 * Reads the run list: one line per intent the run created, Stripe's id then the store's uuid.
-	 *
-	 * @since 0.2.0
-	 *
-	 * @param string $text The list's text.
-	 * @return array<string, string> Each store uuid, by Stripe's PaymentIntent id; a line of another shape is left out.
-	 */
-	public static function runList( string $text ): array {
-		$intents = array();
-
-		foreach ( explode( "\n", $text ) as $line ) {
-			if ( 1 === preg_match( '/^(' . self::INTENT_ID . ') (' . self::UUID . ')$/D', trim( $line ), $match ) ) {
-				$intents[ $match[1] ] = $match[2];
-			}
-		}
-
-		return $intents;
-	}
-
-	/**
 	 * Returns the PaymentIntent a recorded exchange created at Stripe: Stripe's id from the answer, and the store's uuid the request tagged it with.
 	 *
 	 * Only a request that creates a PaymentIntent counts. Stripe answers a declined one 402, with
@@ -138,19 +118,6 @@ final class CleanupSelection {
 		}
 
 		return $intents;
-	}
-
-	/**
-	 * Returns the run list's line for an intent.
-	 *
-	 * @since 0.2.0
-	 *
-	 * @param string $intentId   Stripe's PaymentIntent id.
-	 * @param string $intentUuid The store's uuid of the intent.
-	 * @return string The line, with its newline.
-	 */
-	public static function line( string $intentId, string $intentUuid ): string {
-		return $intentId . ' ' . $intentUuid . "\n";
 	}
 
 	/**

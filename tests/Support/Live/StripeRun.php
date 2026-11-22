@@ -11,11 +11,16 @@ declare( strict_types=1 );
 
 namespace SEOCart\GatewayForStripe\Tests\Support\Live;
 
+use SEOCart\Tests\Conformance\Payment\Live\LiveDeclaration;
+use SEOCart\Tests\Conformance\Payment\Live\MessageGuard;
+
 /**
- * Names the soak's environment of a run against Stripe's test mode.
+ * Names the soak's environment and the installation a run against Stripe's test mode runs as, and gives the live tests the plugin's declaration and its guard.
  *
- * The workflow's soak-size step checks the soak-size input and gives the size to the webhooks
- * job's later steps; the seed repeats a soak.
+ * The run's files, its report and the guard are SEOCart's (tests/Conformance/Payment/Live), built
+ * from this plugin's tests/live.php. What is Stripe's alone is here: the soak's size, which the
+ * workflow's soak-size step checks and gives to the webhooks job, and its seed; and the installation
+ * every run's webhook endpoint is set up as.
  *
  * @since 0.2.0
  */
@@ -38,4 +43,69 @@ final class StripeRun {
 	 * @var string
 	 */
 	public const SOAK_SEED = 'SEOCART_SOAK_SEED';
+
+	/**
+	 * The repository whose name the run's installation uuid is made from.
+	 *
+	 * @since 0.2.0
+	 *
+	 * @var string
+	 */
+	public const REPOSITORY_URL = 'https://github.com/cirkuitnet/seocart-gateway-for-stripe';
+
+	/**
+	 * RFC 9562's namespace of URLs, in which the installation uuid is a name.
+	 *
+	 * @since 0.2.0
+	 *
+	 * @var string
+	 */
+	private const URL_NAMESPACE = '6ba7b811-9dad-11d1-80b4-00c04fd430c8';
+
+	/**
+	 * Returns the uuid every run's site has as its installation: the version-5 uuid of the repository's address.
+	 *
+	 * Every run provisions its webhook endpoint as this one installation, so the endpoint a run that
+	 * crashed left behind is found as this installation's: the next run's provisioning replaces it,
+	 * and the cleanup of every run's webhooks job deletes it. An endpoint of any other installation
+	 * is never touched.
+	 *
+	 * @since 0.2.0
+	 *
+	 * @return string The uuid.
+	 */
+	public static function installUuid(): string {
+		$hash = sha1( (string) hex2bin( str_replace( '-', '', self::URL_NAMESPACE ) ) . self::REPOSITORY_URL );
+
+		return sprintf(
+			'%s-%s-%04x-%04x-%s',
+			substr( $hash, 0, 8 ),
+			substr( $hash, 8, 4 ),
+			( (int) hexdec( substr( $hash, 12, 4 ) ) & 0x0fff ) | 0x5000,
+			( (int) hexdec( substr( $hash, 16, 4 ) ) & 0x3fff ) | 0x8000,
+			substr( $hash, 20, 12 )
+		);
+	}
+
+	/**
+	 * Returns the plugin's declaration of its live workflow, tests/live.php.
+	 *
+	 * @since 0.2.0
+	 *
+	 * @return LiveDeclaration The declaration.
+	 */
+	public static function declaration(): LiveDeclaration {
+		return LiveDeclaration::load( dirname( __DIR__, 3 ) );
+	}
+
+	/**
+	 * Returns the guard every message of the live tests is built through, with Stripe's shapes.
+	 *
+	 * @since 0.2.0
+	 *
+	 * @return MessageGuard The guard.
+	 */
+	public static function guard(): MessageGuard {
+		return self::declaration()->guard();
+	}
 }
