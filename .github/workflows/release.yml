@@ -19,7 +19,7 @@ concurrency:
 
 jobs:
     release:
-        uses: cirkuitnet/seocart/.github/workflows/extension-release.yml@a066fe4113a7d963670c891529facad37821f720
+        uses: cirkuitnet/seocart/.github/workflows/extension-release.yml@6d1edfff508682f1c43f3c50774b81a087091cb1
         # The most the release needs. Each of its jobs asks for less, and only its publish job writes.
         permissions:
             actions: read
